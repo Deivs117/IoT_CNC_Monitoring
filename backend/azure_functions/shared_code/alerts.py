@@ -11,8 +11,7 @@ TEMP_MAX = float(os.getenv("TEMP_MAX", "45.0"))
 HUM_MIN = float(os.getenv("HUM_MIN", "20.0"))
 HUM_MAX = float(os.getenv("HUM_MAX", "80.0"))
 VIBRATION_ANOMALY_THRESHOLD = float(os.getenv("VIBRATION_ANOMALY_THRESHOLD", "0.70"))
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+NEUTRAL_VIBRATION_STATUSES = {"normal", "reposo", "desconocido"}
 
 
 def evaluate_alert(
@@ -34,7 +33,7 @@ def evaluate_alert(
         reasons.append(f"Humedad alta ({humidity:.2f}% > {HUM_MAX:.2f}%)")
 
     normalized_status = (vibration_status or "").strip().lower()
-    if normalized_status and normalized_status not in {"normal", "reposo"}:
+    if normalized_status and normalized_status not in NEUTRAL_VIBRATION_STATUSES:
         reasons.append(f"Estado vibracional reportado como {normalized_status}")
 
     if vibration_anomaly_score is not None and vibration_anomaly_score >= VIBRATION_ANOMALY_THRESHOLD:
@@ -57,12 +56,15 @@ def compose_telegram_message(device_id: str, timestamp: int, reasons: Iterable[s
 
 
 def send_telegram_alert(message: str) -> bool:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+
+    if not telegram_bot_token or not telegram_chat_id:
         return False
 
     response = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
+        f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage",
+        json={"chat_id": telegram_chat_id, "text": message},
         timeout=10,
     )
     response.raise_for_status()

@@ -7,6 +7,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 import azure.functions as func
+from requests import RequestException
 
 from shared_code.alerts import compose_telegram_message, evaluate_alert, send_telegram_alert
 
@@ -20,8 +21,9 @@ def main(events: List[func.EventHubEvent], documents: func.Out[List[Dict[str, An
         try:
             payload = json.loads(event.get_body().decode("utf-8"))
             batch.append(_build_document(payload))
-        except Exception as exc:  # pragma: no cover - runtime observability path
-            logger.exception("No fue posible procesar un evento: %s", exc)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:  # pragma: no cover - runtime observability path
+            raw_preview = event.get_body().decode("utf-8", errors="replace")[:500]
+            logger.exception("No fue posible procesar un evento: %s | body=%r", exc, raw_preview)
 
     if batch:
         documents.set(batch)
@@ -73,7 +75,7 @@ def _build_document(payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             sent = send_telegram_alert(message)
             document["alerts"]["telegram_sent"] = sent
-        except Exception as exc:  # pragma: no cover - runtime observability path
+        except RequestException as exc:  # pragma: no cover - runtime observability path
             logger.exception("No fue posible enviar alerta por Telegram: %s", exc)
             document["alerts"]["telegram_sent"] = False
             document["alerts"]["telegram_error"] = str(exc)

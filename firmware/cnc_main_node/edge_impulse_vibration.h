@@ -7,6 +7,7 @@
 
 constexpr int NUM_INPUTS = 8;
 constexpr int NUM_OUTPUTS = 3;
+constexpr float EPSILON_DIVISION_GUARD = 1e-8f;
 
 /**
  * scaler_params.h - FLUX CNC IoT - Edge AI

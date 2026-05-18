@@ -6,6 +6,8 @@
 
 #include "config.h"
 
+constexpr uint8_t MPU_ACCEL_START_REGISTER = 0x3B;
+
 struct SensorSnapshot {
   float accel_x;
   float accel_y;
@@ -26,11 +28,18 @@ inline void initMpu() {
   Wire.endTransmission(true);
 }
 
-inline void readAcceleration(float* ax, float* ay, float* az) {
+inline bool readAcceleration(float* ax, float* ay, float* az) {
   Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x3B);
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU_ADDR, 6, true);
+  // ACCEL_XOUT_H: primer registro de los 6 bytes consecutivos de aceleración del MPU-6050.
+  Wire.write(MPU_ACCEL_START_REGISTER);
+  if (Wire.endTransmission(false) != 0) {
+    return false;
+  }
+
+  int bytes_read = Wire.requestFrom(MPU_ADDR, 6, true);
+  if (bytes_read != 6) {
+    return false;
+  }
 
   int16_t raw_x = (Wire.read() << 8) | Wire.read();
   int16_t raw_y = (Wire.read() << 8) | Wire.read();
@@ -40,6 +49,7 @@ inline void readAcceleration(float* ax, float* ay, float* az) {
   *ax = raw_x * scale;
   *ay = raw_y * scale;
   *az = raw_z * scale;
+  return true;
 }
 
 inline void updateEnvironment(DHT& dht, float* temperature, float* humidity) {

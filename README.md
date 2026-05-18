@@ -228,12 +228,12 @@ Ejemplo del documento persistido:
 Instalar dependencias:
 
 ```bash
-pip install -r /home/runner/work/IoT_CNC_Monitoring/IoT_CNC_Monitoring/backend/requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 Completar placeholders en:
 
-- `/home/runner/work/IoT_CNC_Monitoring/IoT_CNC_Monitoring/backend/azure_functions/local.settings.json`
+- `backend/azure_functions/local.settings.json`
 - App Settings en Azure para despliegue real
 
 Variables importantes:
@@ -252,7 +252,7 @@ Variables importantes:
 
 Editar placeholders en:
 
-- `/home/runner/work/IoT_CNC_Monitoring/IoT_CNC_Monitoring/firmware/cnc_main_node/config.h`
+- `firmware/cnc_main_node/config.h`
 
 Campos mínimos:
 

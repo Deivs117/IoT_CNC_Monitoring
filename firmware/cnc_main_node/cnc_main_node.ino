@@ -43,6 +43,13 @@ int buffer_index = 0;
 bool window_ready = false;
 
 constexpr const char* LABELS[] = {"reposo", "normal", "anomalia"};
+constexpr unsigned long MIN_VALID_UNIX_TIMESTAMP = 100000UL;
+
+bool isPlaceholderCredential(const char* value) {
+  return value == nullptr || value[0] == '\0' ||
+         strcmp(value, MQTT_USERNAME_PLACEHOLDER) == 0 ||
+         strcmp(value, MQTT_PASSWORD_PLACEHOLDER) == 0;
+}
 
 void connectWifi() {
   WiFi.mode(WIFI_STA);
@@ -64,8 +71,8 @@ void connectMqtt() {
 
     bool connected = mqtt_client.connect(
         DEVICE_ID,
-        MQTT_USERNAME[0] == '\0' ? nullptr : MQTT_USERNAME,
-        MQTT_PASSWORD[0] == '\0' ? nullptr : MQTT_PASSWORD);
+        isPlaceholderCredential(MQTT_USERNAME) ? nullptr : MQTT_USERNAME,
+        isPlaceholderCredential(MQTT_PASSWORD) ? nullptr : MQTT_PASSWORD);
 
     if (connected) {
       Serial.println(" conectado");
@@ -79,7 +86,8 @@ void connectMqtt() {
 
 unsigned long resolveTimestamp() {
   time_t now = time(nullptr);
-  if (now > 100000) {
+  // Filtra timestamps inválidos cercanos a cero antes de caer al respaldo con millis()/1000.
+  if (now > MIN_VALID_UNIX_TIMESTAMP) {
     return static_cast<unsigned long>(now);
   }
   return millis() / 1000UL;
@@ -87,7 +95,7 @@ unsigned long resolveTimestamp() {
 
 void normalizeFeatures(float* features) {
   for (int i = 0; i < NUM_INPUTS; ++i) {
-    features[i] = (features[i] - SCALER_MEAN[i]) / (SCALER_STD[i] + 1e-8f);
+    features[i] = (features[i] - SCALER_MEAN[i]) / (SCALER_STD[i] + EPSILON_DIVISION_GUARD);
   }
 }
 
@@ -186,7 +194,11 @@ void loop() {
   float accel_x = 0.0f;
   float accel_y = 0.0f;
   float accel_z = 0.0f;
-  readAcceleration(&accel_x, &accel_y, &accel_z);
+  if (!readAcceleration(&accel_x, &accel_y, &accel_z)) {
+    Serial.println("[MPU] Lectura I2C invalida");
+    delay(SAMPLE_DELAY_MS);
+    return;
+  }
 
   buffer_x[buffer_index] = accel_x;
   buffer_y[buffer_index] = accel_y;

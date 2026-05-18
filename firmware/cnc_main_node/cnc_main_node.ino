@@ -1,11 +1,16 @@
-#include <Chirale_TensorFlowLite.h>
-#include <WiFi.h>
+#include <Arduino.h>
 #include <Wire.h>
+#include <DHT.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include <time.h>
-
 #include "config.h"
 #include "edge_impulse_vibration.h"
 #include "sensors.h"
+
+// TFLite — debe ir de último para evitar conflictos
+#include <Chirale_TensorFlowLite.h>
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
@@ -126,7 +131,7 @@ void publishTelemetry(const float* probabilities, int predicted_class) {
 }
 
 void setupModel() {
-  error_reporter = &micro_error_reporter;
+  
   tf_model = tflite::GetModel(g_model);
 
   if (tf_model->version() != TFLITE_SCHEMA_VERSION) {

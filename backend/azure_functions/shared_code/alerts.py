@@ -32,7 +32,7 @@ def evaluate_alert(
     elif humidity > HUM_MAX:
         reasons.append(f"Humedad alta ({humidity:.2f}% > {HUM_MAX:.2f}%)")
 
-    normalized_status = (vibration_status or "").strip().lower()
+    normalized_status = normalize_status(vibration_status)
     if normalized_status and normalized_status not in NEUTRAL_VIBRATION_STATUSES:
         reasons.append(f"Estado vibracional reportado como {normalized_status}")
 
@@ -69,3 +69,8 @@ def send_telegram_alert(message: str) -> bool:
     )
     response.raise_for_status()
     return True
+
+
+def normalize_status(vibration_status: Optional[str]) -> str:
+    """Normaliza estados publicados por firmware o payloads parciales para comparaciones consistentes."""
+    return (vibration_status or "").strip().lower()

@@ -12,6 +12,7 @@ from requests import RequestException
 from shared_code.alerts import compose_telegram_message, evaluate_alert, send_telegram_alert
 
 logger = logging.getLogger("telemetry_processor")
+RAW_EVENT_PREVIEW_LENGTH = 500
 
 
 def main(events: List[func.EventHubEvent], documents: func.Out[List[Dict[str, Any]]]) -> None:
@@ -22,7 +23,7 @@ def main(events: List[func.EventHubEvent], documents: func.Out[List[Dict[str, An
             payload = json.loads(event.get_body().decode("utf-8"))
             batch.append(_build_document(payload))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:  # pragma: no cover - runtime observability path
-            raw_preview = event.get_body().decode("utf-8", errors="replace")[:500]
+            raw_preview = event.get_body().decode("utf-8", errors="replace")[:RAW_EVENT_PREVIEW_LENGTH]
             logger.exception("No fue posible procesar un evento: %s | body=%r", exc, raw_preview)
 
     if batch:
@@ -86,13 +87,14 @@ def _build_document(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _coerce_timestamp(value: Any) -> int:
+    fallback_timestamp = int(time.time())
     if value is None:
-        return int(time.time())
+        return fallback_timestamp
 
     try:
         return int(value)
     except (TypeError, ValueError):
-        return int(time.time())
+        return fallback_timestamp
 
 
 def _coerce_float(value: Any, default: float) -> float:

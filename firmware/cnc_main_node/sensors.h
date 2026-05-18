@@ -45,6 +45,7 @@ inline bool readAcceleration(float* ax, float* ay, float* az) {
   int16_t raw_y = (Wire.read() << 8) | Wire.read();
   int16_t raw_z = (Wire.read() << 8) | Wire.read();
 
+  // 16384 LSB/g corresponde a la sensibilidad del MPU-6050 cuando está configurado en rango ±2g.
   constexpr float scale = 9.81f / 16384.0f;
   *ax = raw_x * scale;
   *ay = raw_y * scale;

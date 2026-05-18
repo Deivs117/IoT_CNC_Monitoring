@@ -11,7 +11,7 @@ constexpr float EPSILON_DIVISION_GUARD = 1e-8f;
 
 /**
  * scaler_params.h - FLUX CNC IoT - Edge AI
- * GENERADO AUTOMATICAMENTE por export_weights.py
+ * GENERADO AUTOMÁTICAMENTE por export_weights.py
  * NO EDITAR MANUALMENTE
  */
 
@@ -27,7 +27,7 @@ const float SCALER_STD[8] = {
 
 /**
  * model.h - FLUX CNC IoT - Edge AI
- * GENERADO AUTOMATICAMENTE por export_weights.py
+ * GENERADO AUTOMÁTICAMENTE por export_weights.py
  * NO EDITAR MANUALMENTE
  * Tamano del modelo: 2504 bytes
  */

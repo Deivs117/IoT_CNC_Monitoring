@@ -1,8 +1,4 @@
-#include <Arduino.h>
-#include <ArduinoJson.h>
-#include <DHT.h>
-#include <PubSubClient.h>
-#include <TensorFlowLite_ESP32.h>
+#include <Chirale_TensorFlowLite.h>
 #include <WiFi.h>
 #include <Wire.h>
 #include <time.h>
@@ -11,18 +7,16 @@
 #include "edge_impulse_vibration.h"
 #include "sensors.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
-#include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_log.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
 namespace {
-  tflite::ErrorReporter* error_reporter = nullptr;
   const tflite::Model* tf_model = nullptr;
   tflite::MicroInterpreter* interpreter = nullptr;
   TfLiteTensor* input_tensor = nullptr;
   TfLiteTensor* output_tensor = nullptr;
 
-  static tflite::MicroErrorReporter micro_error_reporter;
   static tflite::AllOpsResolver resolver;
 
   constexpr size_t TENSOR_ARENA_SIZE = 8 * 1024;

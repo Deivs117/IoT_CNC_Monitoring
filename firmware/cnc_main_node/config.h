@@ -1,11 +1,11 @@
 #pragma once
 
 // Wi-Fi (placeholders; reemplazar antes de desplegar según la sección de configuración del README)
-constexpr char WIFI_SSID[] = "REEMPLAZAR_WIFI_SSID";
-constexpr char WIFI_PASSWORD[] = "REEMPLAZAR_WIFI_PASSWORD";
+constexpr char WIFI_SSID[] = "ADMINISTRACION";
+constexpr char WIFI_PASSWORD[] = "administracion2026";
 
 // MQTT broker / Azure IoT bridge
-constexpr char MQTT_BROKER[] = "broker.example.local";
+constexpr char MQTT_BROKER[] = "192.168.1.8";
 constexpr uint16_t MQTT_PORT = 1883;
 constexpr char MQTT_USERNAME_PLACEHOLDER[] = "mqtt_user";
 constexpr char MQTT_PASSWORD_PLACEHOLDER[] = "mqtt_password";

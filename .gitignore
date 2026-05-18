@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+
+# Azure Functions local artifacts
+backend/azure_functions/.python_packages/
+backend/azure_functions/.venv/
+backend/azure_functions/.azurefunctions/
+
+# Arduino / embedded build artifacts
+*.elf
+*.bin
+*.map
+*.hex
+*.ino.cpp
+build/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/

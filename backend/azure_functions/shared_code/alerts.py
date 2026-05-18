@@ -10,7 +10,7 @@ TEMP_MIN = float(os.getenv("TEMP_MIN", "15.0"))
 TEMP_MAX = float(os.getenv("TEMP_MAX", "45.0"))
 HUM_MIN = float(os.getenv("HUM_MIN", "20.0"))
 HUM_MAX = float(os.getenv("HUM_MAX", "80.0"))
-VIBRATION_ANOMALY_THRESHOLD = float(os.getenv("VIBRATION_ANOMALY_THRESHOLD", "0.70"))
+VIBRATION_ANOMALY_THRESHOLD = float(os.getenv("VIBRATION_ANOMALY_THRESHOLD", "0.80"))
 NEUTRAL_VIBRATION_STATUSES = {"normal", "reposo", "desconocido"}
 
 

@@ -20,6 +20,7 @@ import logging
 import os
 import time
 import urllib.parse
+from typing import Dict
 
 import azure.functions as func
 import requests as http_requests
@@ -106,7 +107,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
 def _send_c2d_rest(connection_string: str, device_id: str, payload: str) -> bool:
     """Construye un token SAS manualmente y hace POST al endpoint REST de IoT Hub C2D."""
-    params: dict[str, str] = {}
+    params: Dict[str, str] = {}
     for part in connection_string.split(";"):
         if "=" in part:
             key, _, value = part.partition("=")

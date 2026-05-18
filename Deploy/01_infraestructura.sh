@@ -169,6 +169,11 @@ FUNC_STORAGE_CONN=$(
 # ---------------------------------------------------------------------------
 # Escribir infra_outputs.env (sin mostrar valores sensibles en consola)
 # ---------------------------------------------------------------------------
+if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+  echo "ADVERTENCIA: TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID no están definidos." \
+       "Las alertas de Telegram quedarán inactivas hasta configurarlas en App Settings." >&2
+fi
+
 echo "==> Guardando outputs en '${ENV_FILE}'..."
 cat > "${ENV_FILE}" <<ENVEOF
 # Generado automáticamente por 01_infraestructura.sh — no modificar manualmente

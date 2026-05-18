@@ -37,8 +37,7 @@ for var in RG_NAME LOCATION FUNC_APP_NAME FUNC_STORAGE FUNC_STORAGE_CONN \
 done
 
 if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-  echo "ADVERTENCIA: TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID están vacíos." \
-       "Las alertas de Telegram quedarán deshabilitadas." >&2
+  echo "ADVERTENCIA: TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID están vacíos. Las alertas de Telegram quedarán deshabilitadas." >&2
 fi
 
 echo "==> [02] Desplegando Azure Functions '${FUNC_APP_NAME}'..."

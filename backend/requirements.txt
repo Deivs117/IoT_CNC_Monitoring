@@ -1,0 +1,5 @@
+# Azure Functions runtime
+azure-functions==1.19.0
+
+# Telegram alerts
+requests==2.32.3

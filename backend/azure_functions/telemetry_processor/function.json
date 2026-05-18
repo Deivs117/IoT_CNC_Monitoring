@@ -1,0 +1,24 @@
+{
+  "scriptFile": "__init__.py",
+  "bindings": [
+    {
+      "type": "eventHubTrigger",
+      "name": "events",
+      "direction": "in",
+      "eventHubName": "%IOT_HUB_EVENTHUB_NAME%",
+      "connection": "IOTHUB_CONNECTION_STRING",
+      "cardinality": "many",
+      "consumerGroup": "$Default",
+      "dataType": "binary"
+    },
+    {
+      "type": "cosmosDB",
+      "name": "documents",
+      "direction": "out",
+      "databaseName": "%COSMOS_DATABASE%",
+      "collectionName": "%COSMOS_CONTAINER%",
+      "connectionStringSetting": "COSMOS_CONNECTION_STRING",
+      "createIfNotExists": false
+    }
+  ]
+}

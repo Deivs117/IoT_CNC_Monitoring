@@ -6,7 +6,7 @@
       "name": "events",
       "direction": "in",
       "eventHubName": "%IOT_HUB_EVENTHUB_NAME%",
-      "connection": "IOTHUB_CONNECTION_STRING",
+      "connection": "IOTHUB_EVENTS_CONNECTION_STRING",
       "cardinality": "many",
       "consumerGroup": "$Default",
       "dataType": "binary"
@@ -15,9 +15,9 @@
       "type": "cosmosDB",
       "name": "documents",
       "direction": "out",
-      "databaseName": "%COSMOS_DATABASE%",
-      "collectionName": "%COSMOS_CONTAINER%",
-      "connectionStringSetting": "COSMOS_CONNECTION_STRING",
+      "databaseName": "CNCMonitor",
+      "collectionName": "Telemetry",
+      "connectionStringSetting": "COSMOSDB_CONNECTION",
       "createIfNotExists": false
     }
   ]

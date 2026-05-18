@@ -3,17 +3,17 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "python",
-    "IOTHUB_CONNECTION_STRING": "Endpoint=sb://REEMPLAZAR.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=REEMPLAZAR",
+    "IOTHUB_EVENTS_CONNECTION_STRING": "Endpoint=sb://REEMPLAZAR.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=REEMPLAZAR",
     "IOT_HUB_EVENTHUB_NAME": "iothub-ehub-reemplazar",
-    "COSMOS_CONNECTION_STRING": "AccountEndpoint=https://reemplazar.documents.azure.com:443/;AccountKey=REEMPLAZAR;",
-    "COSMOS_DATABASE": "cnc_pcb_monitoreo",
-    "COSMOS_CONTAINER": "telemetry",
+    "IOTHUB_SERVICE_CONNECTION_STRING": "HostName=REEMPLAZAR.azure-devices.net;SharedAccessKeyName=service;SharedAccessKey=REEMPLAZAR",
+    "IOT_DEVICE_ID": "cnc_fresadora_01",
+    "COSMOSDB_CONNECTION": "AccountEndpoint=https://reemplazar.documents.azure.com:443/;AccountKey=REEMPLAZAR;",
     "TELEGRAM_BOT_TOKEN": "",
     "TELEGRAM_CHAT_ID": "",
     "TEMP_MIN": "15.0",
     "TEMP_MAX": "45.0",
     "HUM_MIN": "20.0",
     "HUM_MAX": "80.0",
-    "VIBRATION_ANOMALY_THRESHOLD": "0.70"
+    "VIBRATION_ANOMALY_THRESHOLD": "0.80"
   }
 }

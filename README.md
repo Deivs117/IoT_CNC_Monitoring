@@ -2,102 +2,103 @@
 
 Sistema IoT + Edge AI + Serverless para monitoreo analítico y predictivo de una fresadora CNC usada en manufactura de PCBs.
 
+---
+
 ## 1. Objetivo del proyecto
 
-`cnc-pcb-monitoreo` inicializa la **Tarea 1 Versión 1** del proyecto final del curso con una arquitectura preparada para operar con bajo costo, alta seguridad y evolución incremental. El sistema monitorea variables tabulares de proceso —temperatura, humedad y vibración inferida desde acelerometría 3 ejes— para detectar desviaciones que puedan dañar placas de cobre o romper herramientas.
+`cnc-pcb-monitoreo` integra firmware embebido, funciones serverless en Azure y un dashboard web para detectar en tiempo real desviaciones de temperatura, humedad y vibración que puedan dañar placas de cobre o romper herramientas.
 
-La solución queda estructurada para integrar más adelante una **ESP32-CAM** y una capa de visión artificial sin rehacer el backend ni rediseñar el esquema de almacenamiento.
+La arquitectura queda preparada para integrar más adelante una **ESP32-CAM** y una capa de visión artificial sin rediseñar el backend ni el esquema de almacenamiento.
 
-## 2. Problema industrial
+---
 
-Durante el fresado CNC de PCBs, pequeñas variaciones térmicas o vibraciones anómalas pueden producir:
+## 2. Arquitectura de la solución
 
-- placas defectuosas por pérdida de precisión;
-- desgaste acelerado de la herramienta;
-- tiempos muertos por recalibración o mantenimiento;
-- pérdida de propiedad intelectual si los datos o diseños son expuestos sin control.
+```
+ESP32 (MPU-6050 + DHT22 + TF Lite)
+  │  MQTT / MQTTS → Azure IoT Hub
+  ▼
+Azure IoT Hub
+  │  Event Hub-compatible endpoint
+  ▼
+Azure Function: telemetry_processor  ←── EventHub Trigger
+  │  • Parsea payload JSON
+  │  • Evalúa alertas (temperatura, humedad, vibración, anomaly score)
+  │  • Envía notificación por Telegram si hay alerta
+  │  • Escribe documento en Cosmos DB vía Output Binding
+  ▼
+Azure Cosmos DB (Serverless)
+  Base de datos : CNCMonitor
+  Contenedor    : Telemetry   (partition key: /device_id)
+  │
+  ├── Azure Function: get_datos       GET  /api/datos
+  ├── Azure Function: descargar_csv   GET  /api/datos/csv
+  └── Azure Function: control_actuador POST /api/actuador
+              │  1. Direct Method (invoke_device_method)
+              │  2. SDK C2D  (send_c2d_message)
+              │  3. REST C2D (token SAS manual)
+              ▼
+           ESP32: recibe ON / OFF / RESET → GPIO actuador
+  ▼
+Frontend (Azure Static Website)
+  Dashboard oscuro con métricas, tabla, control y placeholder de cámara.
+```
 
-Por ello el sistema debe ser:
+---
 
-- **económico**, para ajustarse a una suscripción de estudiante;
-- **seguro**, evitando credenciales hardcodeadas y favoreciendo App Settings;
-- **rápido de implementar**, priorizando servicios administrados y una arquitectura desacoplada.
-
-## 3. Decisiones arquitectónicas y justificación
-
-### Cloud: Azure Functions Serverless (Consumption Plan)
-
-Se adopta Azure Functions para evitar costos fijos de una VM o contenedor 24/7. Si la CNC no está operando, el costo tiende a cero. Además, el modelo serverless acelera el desarrollo y reduce la carga operativa del equipo.
-
-### Protocolo: MQTT
-
-MQTT reduce la sobrecarga respecto a HTTP y se adapta mejor al ESP32. El nodo principal publica la telemetría y puede desacoplarse de consumidores posteriores sin conocerlos directamente.
-
-### Persistencia: Azure Cosmos DB Serverless
-
-Cosmos DB Serverless permite almacenar documentos JSON con pago por uso. Esto encaja con el crecimiento progresivo del sistema y con la necesidad de recibir, en el futuro, datos adicionales de visión artificial sin migraciones de esquema rígidas.
-
-### Alertas: Telegram Bot API
-
-Telegram ofrece una vía de notificación gratuita y rápida. El backend solo necesita un `POST` HTTP a la Bot API usando variables de entorno para el token y el chat de destino.
-
-## 4. Cómo se fundamenta esta versión en los repositorios previos
-
-Esta inicialización fusiona dos bases de conocimiento ya desarrolladas:
-
-1. **[`ktalynagb/cnc-iot-ia`](https://github.com/ktalynagb/cnc-iot-ia)**
-   - aporta el firmware de captura con ESP32 + MPU-6050 + DHT;
-   - aporta la lógica TinyML/TF Lite Micro para inferencia embebida;
-   - aporta los pesos exportados del modelo MLP y los parámetros de escalado.
-
-2. **[`ktalynagb/cnc-iot-practica3`](https://github.com/ktalynagb/cnc-iot-practica3)**
-   - aporta la base de Azure Functions;
-   - aporta la estructura `host.json` y la función de procesamiento por lotes;
-   - aporta la lógica previa de umbrales y alertas, aquí adaptada al nuevo payload JSON y extendida con Telegram.
-
-El resultado no copia esos repositorios tal cual: los **reorganiza** dentro de una estructura nueva y los adapta al alcance específico de monitoreo de PCBs.
-
-## 5. Estructura del repositorio
+## 3. Estructura del repositorio
 
 ```text
 cnc-pcb-monitoreo/
 ├── .gitignore
 ├── README.md
 ├── firmware/
-│   ├── cnc_main_node/
+│   ├── cnc_main_node/              ← Nodo principal ESP32
 │   │   ├── cnc_main_node.ino
 │   │   ├── config.h
 │   │   ├── edge_impulse_vibration.h
 │   │   └── sensors.h
 │   └── cnc_camera_node/
-│       └── .gitkeep
+│       └── .gitkeep                ← Reservado para ESP32-CAM
 ├── backend/
-│   ├── azure_functions/
-│   │   ├── host.json
-│   │   ├── local.settings.json
-│   │   ├── telemetry_processor/
-│   │   │   ├── __init__.py
-│   │   │   └── function.json
-│   │   └── shared_code/
-│   │       ├── __init__.py
-│   │       └── alerts.py
-│   └── requirements.txt
-└── frontend/
-    └── .gitkeep
+│   ├── requirements.txt            ← Dependencias (dev local)
+│   └── azure_functions/            ← Raíz del Function App
+│       ├── host.json
+│       ├── local.settings.json     ← Variables locales (no commitear con valores reales)
+│       ├── requirements.txt        ← Dependencias para despliegue en Azure
+│       ├── shared_code/
+│       │   ├── __init__.py
+│       │   └── alerts.py           ← Umbrales + Telegram Bot API
+│       ├── telemetry_processor/    ← Ingestión IoT Hub → Cosmos DB
+│       │   ├── __init__.py
+│       │   └── function.json
+│       ├── get_datos/              ← GET /api/datos (últimos 100 registros)
+│       │   ├── __init__.py
+│       │   └── function.json
+│       ├── descargar_csv/          ← GET /api/datos/csv (descarga CSV)
+│       │   ├── __init__.py
+│       │   └── function.json
+│       └── control_actuador/       ← POST /api/actuador (ON/OFF/RESET)
+│           ├── __init__.py
+│           └── function.json
+├── frontend/
+│   ├── index.html                  ← Dashboard oscuro CNC PCB
+│   ├── app.js                      ← Lógica de UI (polling, actuador, CSV)
+│   └── style.css                   ← Tema oscuro con tarjeta placeholder de cámara
+└── Deploy/
+    ├── deploy.sh                   ← Orquestador (flags: --no-infra, --no-front, etc.)
+    ├── 01_infraestructura.sh       ← RG + IoT Hub + Cosmos DB Serverless + Storage
+    ├── 02_backend.sh               ← Function App + App Settings + publicación
+    ├── 03_frontend_hosting.sh      ← Static Website + inyección de variables + CORS
+    ├── 04_cleanup.sh               ← Eliminación del entorno (confirmación interactiva)
+    └── infra_outputs.env.template  ← Plantilla de variables (copiar a infra_outputs.env)
 ```
 
-## 6. Flujo de extremo a extremo
+---
 
-1. El **ESP32 principal** toma muestras del MPU-6050 y del DHT22.
-2. Con una ventana de 32 muestras calcula features estadísticas.
-3. Ejecuta inferencia local con el **MLP exportado desde `cnc-iot-ia`**.
-4. Publica un JSON vía MQTT con variables de sensores y predicciones.
-5. Azure Functions consume eventos, normaliza el documento y lo escribe en Cosmos DB.
-6. Si existen condiciones de alerta, el backend envía una notificación a Telegram.
+## 4. Contrato JSON de telemetría
 
-## 7. Contrato JSON de telemetría
-
-Payload objetivo del nodo principal:
+Payload publicado por el nodo principal vía MQTT:
 
 ```json
 {
@@ -115,76 +116,11 @@ Payload objetivo del nodo principal:
 }
 ```
 
-### Razón del diseño
+`visual_anomaly_score` queda en `null` hasta integrar la ESP32-CAM. El backend y el frontend ya están preparados para recibirlo.
 
-- `sensors` agrupa telemetría de proceso.
-- `predictions` separa resultados analíticos/predictivos de los datos crudos.
-- `visual_anomaly_score` queda en `null` para que la integración futura de ESP32-CAM sea solo una extensión del payload, no una ruptura de compatibilidad.
+---
 
-## 8. Firmware `firmware/cnc_main_node/`
-
-El nodo principal ahora concentra tres piezas derivadas del trabajo previo:
-
-- **sensado** reutilizando la lógica de `cnc_iot_esp32.ino` para MPU-6050 y DHT;
-- **inferencia embebida** reutilizando la lógica de `cnc_mlp_inference.ino`;
-- **publicación MQTT** adaptada al payload JSON del proyecto final.
-
-### Archivos clave
-
-#### `cnc_main_node.ino`
-- inicializa Wi-Fi, MQTT, sensores y TF Lite Micro;
-- genera features estadísticas sobre la vibración;
-- ejecuta clasificación local;
-- publica el JSON objetivo.
-
-#### `config.h`
-- concentra parámetros de red, broker MQTT, pines y umbrales;
-- usa placeholders para evitar exponer credenciales reales.
-
-#### `sensors.h`
-- encapsula inicialización y lectura del MPU-6050;
-- reutiliza la lógica de adquisición ambiental y cálculo de features.
-
-#### `edge_impulse_vibration.h`
-- incorpora los pesos del modelo MLP exportado y los parámetros `SCALER_MEAN` / `SCALER_STD` provenientes de `cnc-iot-ia`.
-
-### Dependencias esperadas en Arduino IDE
-
-- `DHT sensor library`
-- `PubSubClient`
-- `ArduinoJson`
-- `TFLite_ESP32` o la variante de TensorFlow Lite Micro usada en el repositorio base
-
-## 9. Backend `backend/azure_functions/`
-
-El backend adapta `procesar_datos` del repositorio serverless previo a una función más alineada con esta versión del proyecto.
-
-### `telemetry_processor/__init__.py`
-
-- consume lotes desde Event Hub compatible con IoT Hub;
-- parsea el JSON publicado por el firmware;
-- construye un documento flexible para Cosmos DB;
-- evalúa alertas por temperatura, humedad y score de anomalía vibracional;
-- envía notificaciones a Telegram cuando aplica.
-
-### `telemetry_processor/function.json`
-
-Usa:
-- **Event Hub Trigger** para la ingestión;
-- **Cosmos DB Output Binding** para persistencia serverless.
-
-Esto permite mantener una implementación ligera y coherente con el objetivo de prototipado rápido.
-
-### `shared_code/alerts.py`
-
-Extiende la lógica previa de umbrales del repositorio `cnc-iot-practica3` para:
-- aceptar el nuevo payload anidado;
-- evaluar `vibration_status` y `vibration_anomaly_score`;
-- enviar mensajes por Telegram cuando existan alertas activas.
-
-## 10. Documento almacenado en Cosmos DB
-
-Ejemplo del documento persistido:
+## 5. Documento almacenado en Cosmos DB
 
 ```json
 {
@@ -205,87 +141,126 @@ Ejemplo del documento persistido:
     "reasons": [],
     "telegram_sent": false
   },
-  "raw_payload": {
-    "device_id": "cnc_fresadora_01",
-    "timestamp": 1716076800,
-    "sensors": {
-      "temperature": 24.5,
-      "humidity": 45.2,
-      "vibration_status": "normal"
-    },
-    "predictions": {
-      "vibration_anomaly_score": 0.02,
-      "visual_anomaly_score": null
-    }
-  }
+  "raw_payload": { "..." : "..." }
 }
 ```
 
-## 11. Configuración local mínima
+---
 
-### Backend
+## 6. Azure Functions — descripción de endpoints
 
-Instalar dependencias:
+| Función | Trigger | Ruta | Auth |
+|---|---|---|---|
+| `telemetry_processor` | EventHub (IoT Hub) | — | — |
+| `get_datos` | HTTP GET | `/api/datos` | function |
+| `descargar_csv` | HTTP GET | `/api/datos/csv` | function |
+| `control_actuador` | HTTP POST | `/api/actuador` | function |
+
+### `get_datos` — parámetros opcionales
+| Parámetro | Tipo | Default | Descripción |
+|---|---|---|---|
+| `limit` | int | 100 | Máximo 500 registros |
+| `device_id` | string | todos | Filtrar por dispositivo |
+
+### `descargar_csv` — parámetros opcionales
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| `device_id` | string | Filtrar por dispositivo |
+
+### `control_actuador` — body JSON
+```json
+{ "comando": "ON" }
+```
+Comandos válidos: `ON`, `OFF`, `RESET`.
+El `device_id` se fuerza siempre desde `IOT_DEVICE_ID` (variable de entorno), ignorando lo que envíe el cliente.
+
+---
+
+## 7. Variables de entorno requeridas
+
+Todas las variables se configuran como App Settings en Azure (nunca hardcodeadas).
+Para desarrollo local, completar `backend/azure_functions/local.settings.json`.
+
+| Variable | Descripción |
+|---|---|
+| `AzureWebJobsStorage` | Cadena de conexión del Storage Account de Functions |
+| `FUNCTIONS_WORKER_RUNTIME` | `python` |
+| `IOTHUB_EVENTS_CONNECTION_STRING` | Endpoint Event Hub-compatible del IoT Hub (política `service`) |
+| `IOT_HUB_EVENTHUB_NAME` | Nombre interno del Event Hub del IoT Hub |
+| `IOTHUB_SERVICE_CONNECTION_STRING` | Cadena de conexión del servicio IoT Hub (Direct Methods + C2D) |
+| `IOT_DEVICE_ID` | ID del dispositivo ESP32 registrado en IoT Hub |
+| `COSMOSDB_CONNECTION` | Cadena de conexión primaria de Cosmos DB |
+| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (de @BotFather) |
+| `TELEGRAM_CHAT_ID` | ID del chat o grupo de Telegram para alertas |
+| `TEMP_MIN` | Temperatura mínima normal (default: `15.0` °C) |
+| `TEMP_MAX` | Temperatura máxima normal (default: `45.0` °C) |
+| `HUM_MIN` | Humedad mínima normal (default: `20.0` %) |
+| `HUM_MAX` | Humedad máxima normal (default: `80.0` %) |
+| `VIBRATION_ANOMALY_THRESHOLD` | Score mínimo para disparar alerta (default: `0.80`) |
+
+---
+
+## 8. Flujo de despliegue
+
+### Pre-requisitos
 
 ```bash
+# Instalar az CLI y autenticarse
+az login
+
+# Instalar Azure Functions Core Tools
+npm install -g azure-functions-core-tools@4 --unsafe-perm true
+
+# (Opcional) Instalar dependencias locales
 pip install -r backend/requirements.txt
 ```
 
-Completar placeholders en:
+### Variables de Telegram (antes de ejecutar)
 
-- `backend/azure_functions/local.settings.json`
-- App Settings en Azure para despliegue real
+```bash
+export TELEGRAM_BOT_TOKEN="<token>"
+export TELEGRAM_CHAT_ID="<chat_id>"
+```
 
-Variables importantes:
+### Despliegue completo
 
-- `IOTHUB_CONNECTION_STRING`
-- `IOT_HUB_EVENTHUB_NAME`
-- `COSMOS_CONNECTION_STRING`
-- `COSMOS_DATABASE`
-- `COSMOS_CONTAINER`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `TEMP_MIN`, `TEMP_MAX`, `HUM_MIN`, `HUM_MAX`
-- `VIBRATION_ANOMALY_THRESHOLD`
+```bash
+cd Deploy/
+./deploy.sh
+```
 
-### Firmware
+### Despliegues parciales
 
-Editar placeholders en:
+```bash
+./deploy.sh --no-infra      # Solo backend + frontend (infra ya existe)
+./deploy.sh --no-front      # Solo infra + backend
+./deploy.sh --only-backend  # Solo republica las Functions
+./deploy.sh --only-front    # Solo actualiza el frontend
+```
 
-- `firmware/cnc_main_node/config.h`
+### Eliminar el entorno (ahorro de costos)
 
-Campos mínimos:
+```bash
+./04_cleanup.sh
+# Pide confirmación interactiva antes de borrar.
+# Usar FORCE_CLEANUP=true ./04_cleanup.sh en pipelines CI/CD.
+```
 
-- SSID y password Wi-Fi
-- broker/endpoint MQTT
-- topic de telemetría
-- credenciales del broker
+---
 
-## 12. Extensibilidad para ESP32-CAM y frontend
+## 9. Seguridad
 
-Se dejaron dos espacios reservados:
+- Ninguna credencial real se incluye en el repositorio. `local.settings.json` contiene únicamente placeholders.
+- `Deploy/infra_outputs.env` está en `.gitignore`. Nunca commitear este archivo.
+- Los endpoints HTTP usan `authLevel: "function"` para requerir una clave de acceso.
+- El `device_id` del actuador se fuerza desde la variable de entorno `IOT_DEVICE_ID`.
+- El script `01_infraestructura.sh` establece `chmod 600` en `infra_outputs.env`.
+- Las cadenas de conexión nunca se imprimen en la salida estándar de los scripts.
 
-- `firmware/cnc_camera_node/.gitkeep`
-- `frontend/.gitkeep`
+---
 
-Esto formaliza desde ya la modularidad del sistema:
+## 10. Extensibilidad
 
-- la **cámara** podrá publicar `visual_anomaly_score` sin alterar el backend;
-- el **frontend** podrá consumir Cosmos DB o APIs adicionales más adelante sin afectar la ingesta actual.
-
-## 13. Seguridad y buenas prácticas incluidas en esta versión
-
-- No se incluyen credenciales reales en el repositorio.
-- `config.h` y `local.settings.json` quedan con valores placeholder.
-- El backend usa variables de entorno para Telegram y Azure.
-- La persistencia se basa en documentos JSON flexibles, evitando acoplamiento prematuro.
-
-## 14. Estado actual de la inicialización
-
-Esta versión deja listo el esqueleto funcional del proyecto para:
-
-- continuar el firmware del nodo principal;
-- desplegar la Azure Function de ingestión;
-- conectar Cosmos DB Serverless;
-- activar alertas en Telegram;
-- incorporar posteriormente visión artificial y frontend sin romper el contrato actual.
+- **ESP32-CAM**: publicar `visual_anomaly_score` en el payload MQTT existente. El backend y la tabla del frontend ya leen ese campo; el placeholder del dashboard se activa automáticamente cuando el valor deja de ser `null`.
+- **Nuevas alertas**: agregar condiciones en `shared_code/alerts.py` sin tocar las demás funciones.
+- **Índices Cosmos DB**: para acelerar las consultas ordenadas por `timestamp`, agregar una política de índice compuesto `["/device_id ASC", "/timestamp DESC"]` en el contenedor `Telemetry`.

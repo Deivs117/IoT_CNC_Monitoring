@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor CNC PCB — Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ═══════════════════════════════ HEADER ════════════════════════════════ -->
+  <header class="header">
+    <div class="header__inner">
+      <div class="header__title">
+        <span class="header__icon">⚙️</span>
+        <h1>Monitor CNC PCB</h1>
+        <span class="header__subtitle">Manufactura de Placas de Circuito Impreso</span>
+      </div>
+      <div class="header__status">
+        <span id="status-dot" class="status-dot status-connecting"></span>
+        <span id="status-label" class="status-label">Conectando…</span>
+        <span id="last-update" class="status-timestamp"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════ MAIN CONTENT ════════════════════════════ -->
+  <main class="container">
+
+    <!-- Métricas en tiempo real -->
+    <section class="section">
+      <h2 class="section__title">Estado del Proceso</h2>
+      <div class="metrics-grid">
+
+        <!-- Temperatura -->
+        <div class="metric-card" id="card-temp">
+          <div class="metric-card__icon">🌡️</div>
+          <div class="metric-card__label">Temperatura</div>
+          <div class="metric-card__value" id="val-temp">—</div>
+          <div class="metric-card__unit">°C</div>
+          <div class="metric-card__badge" id="badge-temp"></div>
+        </div>
+
+        <!-- Humedad -->
+        <div class="metric-card" id="card-hum">
+          <div class="metric-card__icon">💧</div>
+          <div class="metric-card__label">Humedad</div>
+          <div class="metric-card__value" id="val-hum">—</div>
+          <div class="metric-card__unit">%</div>
+          <div class="metric-card__badge" id="badge-hum"></div>
+        </div>
+
+        <!-- Estado Vibracional -->
+        <div class="metric-card" id="card-vib">
+          <div class="metric-card__icon">📳</div>
+          <div class="metric-card__label">Estado Vibracional</div>
+          <div class="metric-card__value metric-card__value--text" id="val-vib">—</div>
+          <div class="metric-card__unit"></div>
+          <div class="metric-card__badge" id="badge-vib"></div>
+        </div>
+
+        <!-- Score Anomalía Vibracional -->
+        <div class="metric-card" id="card-anom-vib">
+          <div class="metric-card__icon">📊</div>
+          <div class="metric-card__label">Anomalía Vibracional</div>
+          <div class="metric-card__value" id="val-anom-vib">—</div>
+          <div class="metric-card__unit">score</div>
+          <div class="metric-card__badge" id="badge-anom-vib"></div>
+        </div>
+
+        <!-- Estado de Alerta -->
+        <div class="metric-card" id="card-alert">
+          <div class="metric-card__icon">🚨</div>
+          <div class="metric-card__label">Alerta</div>
+          <div class="metric-card__value metric-card__value--text" id="val-alert">—</div>
+          <div class="metric-card__unit"></div>
+          <div class="metric-card__badge" id="badge-alert"></div>
+        </div>
+
+        <!-- Cámara / Visual Anomaly Score — PLACEHOLDER (Próximamente) -->
+        <div class="metric-card metric-card--disabled" id="card-anom-visual" title="Requiere ESP32-CAM">
+          <div class="metric-card__icon">📷</div>
+          <div class="metric-card__label">Anomalía Visual</div>
+          <div class="metric-card__value" id="val-anom-visual">—</div>
+          <div class="metric-card__unit">score</div>
+          <div class="metric-card__badge metric-card__badge--coming-soon">Próximamente</div>
+          <div class="metric-card__coming-soon-overlay">Cámara / Visual Anomaly Score<br>(Próximamente)</div>
+        </div>
+
+      </div><!-- /.metrics-grid -->
+
+      <!-- Motivos de alerta (se muestra solo cuando hay alerta activa) -->
+      <div id="alert-reasons-panel" class="alert-reasons hidden">
+        <span class="alert-reasons__icon">⚠️</span>
+        <span id="alert-reasons-text"></span>
+      </div>
+    </section>
+
+    <!-- Control de Actuador -->
+    <section class="section">
+      <h2 class="section__title">Control del Actuador</h2>
+      <div class="actuator-panel">
+        <button class="btn btn--on"    onclick="sendCommand('ON')">⬆ Encender</button>
+        <button class="btn btn--off"   onclick="sendCommand('OFF')">⬇ Apagar</button>
+        <button class="btn btn--reset" onclick="sendCommand('RESET')">🔄 Reiniciar</button>
+      </div>
+      <div id="actuator-response" class="actuator-response hidden"></div>
+    </section>
+
+    <!-- Tabla de lecturas recientes -->
+    <section class="section">
+      <h2 class="section__title">Lecturas Recientes</h2>
+      <div class="table-controls">
+        <label class="table-controls__label" for="sel-limit">Mostrar:</label>
+        <select id="sel-limit" class="select" onchange="fetchData()">
+          <option value="20">20</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+        <label class="table-controls__label" for="inp-device">Dispositivo:</label>
+        <input id="inp-device" class="input" type="text" placeholder="Todos" onchange="fetchData()" />
+        <button class="btn btn--secondary" onclick="fetchData()">🔄 Actualizar</button>
+        <button class="btn btn--secondary" onclick="downloadCSV()">⬇ Exportar CSV</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="data-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Dispositivo</th>
+              <th>Temp (°C)</th>
+              <th>Hum (%)</th>
+              <th>Vibración</th>
+              <th>Score Vib.</th>
+              <th>Score Visual</th>
+              <th>Alerta</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="8" class="table-empty">Cargando datos…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main><!-- /.container -->
+
+  <!-- ══════════════════════════════ FOOTER ════════════════════════════════ -->
+  <footer class="footer">
+    <span>Monitor CNC PCB — Manufactura Serverless con Azure IoT Hub + Cosmos DB</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

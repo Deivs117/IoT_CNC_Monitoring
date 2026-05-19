@@ -135,7 +135,7 @@ void setupModel() {
   tf_model = tflite::GetModel(g_model);
 
   if (tf_model->version() != TFLITE_SCHEMA_VERSION) {
-    TF_LITE_REPORT_ERROR(error_reporter, "Version de modelo incompatible");
+    MicroPrintf("Version de modelo incompatible");
     return;
   }
 
@@ -143,8 +143,7 @@ void setupModel() {
       tf_model,
       resolver,
       tensor_arena,
-      TENSOR_ARENA_SIZE,
-      error_reporter);
+      TENSOR_ARENA_SIZE);
 
   interpreter = &static_interpreter;
   if (interpreter->AllocateTensors() != kTfLiteOk) {

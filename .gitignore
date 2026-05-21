@@ -30,3 +30,7 @@ build/
 
 # Azure Functions local settings (contains secrets)
 backend/azure_functions/local.settings.json
+
+# Local test files
+test_msg.json
+appsettings.json

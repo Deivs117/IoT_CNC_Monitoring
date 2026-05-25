@@ -1,11 +1,5 @@
-# Azure Functions runtime
-azure-functions==1.19.0
-
-# Telegram alerts
-requests==2.32.3
-
-# Cosmos DB client (get_datos, descargar_csv)
-azure-cosmos==4.6.0
-
-# IoT Hub service SDK (control_actuador: Direct Method + C2D)
-azure-iot-hub==2.6.1
+# Dependencias del MQTT Bridge (mqtt_bridge.py)
+# Puente local entre Mosquitto y Azure IoT Hub.
+# Instalar con: pip install -r backend/requirements.txt
+paho-mqtt>=1.6.1
+azure-iot-device>=2.12.0

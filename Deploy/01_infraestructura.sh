@@ -79,17 +79,14 @@ else
 fi
 
 # Registro del dispositivo ESP32
-log "Verificando dispositivo '${IOT_DEVICE_ID}' en IoT Hub..."
-if az iot hub device-identity show \
-     --hub-name "${IOT_HUB_NAME}" \
-     --device-id "${IOT_DEVICE_ID}" &>/dev/null; then
-  warn "Dispositivo '${IOT_DEVICE_ID}' ya existe — omitiendo creación."
-else
-  az iot hub device-identity create \
+log "Registrando dispositivo '${IOT_DEVICE_ID}' en IoT Hub..."
+if az iot hub device-identity create \
     --hub-name "${IOT_HUB_NAME}" \
     --device-id "${IOT_DEVICE_ID}" \
-    --output none
+    --output none 2>/dev/null; then
   ok "Dispositivo '${IOT_DEVICE_ID}' registrado en IoT Hub."
+else
+  warn "Dispositivo '${IOT_DEVICE_ID}' ya existe o no pudo crearse en este intento — continuando."
 fi
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
 
 # ---------------------------------------------------------------------------
+# Helpers de log
+# ---------------------------------------------------------------------------
+log()  { echo "[04_cleanup] $*"; }
+warn() { echo "[04_cleanup] ⚠ $*"; }
+
+# ---------------------------------------------------------------------------
 # Leer nombre del Resource Group
 # ---------------------------------------------------------------------------
 if [[ -f "${ENV_FILE}" ]]; then
@@ -55,22 +61,29 @@ fi
 # ---------------------------------------------------------------------------
 # Eliminar Resource Group (--no-wait para no bloquear la terminal)
 # ---------------------------------------------------------------------------
-echo "==> Eliminando Resource Group '${RG_NAME}'... (proceso asíncrono)"
-az group delete \
-  --name "${RG_NAME}" \
-  --yes \
-  --no-wait
+log "Verificando si existe el Resource Group '${RG_NAME}'..."
+if ! az group show --name "${RG_NAME}" &>/dev/null; then
+  warn "Resource Group '${RG_NAME}' no existe. Nada que eliminar."
+else
+  log "Eliminando Resource Group '${RG_NAME}'... (proceso asíncrono)"
+  az group delete \
+    --name "${RG_NAME}" \
+    --yes \
+    --no-wait
+  echo "[04_cleanup] ✓ Eliminación de '${RG_NAME}' iniciada en background."
+  log "  Puedes verificar el estado con:"
+  log "  az group show --name '${RG_NAME}'"
+fi
 
 # ---------------------------------------------------------------------------
 # Eliminar infra_outputs.env local
 # ---------------------------------------------------------------------------
 if [[ -f "${ENV_FILE}" ]]; then
-  echo "==> Eliminando archivo local de outputs '${ENV_FILE}'..."
+  log "Eliminando archivo local de outputs '${ENV_FILE}'..."
   rm -f "${ENV_FILE}"
+  echo "[04_cleanup] ✓ Archivo '${ENV_FILE}' eliminado."
 fi
 
 echo ""
-echo "==> [04] Solicitud de eliminación enviada a Azure."
-echo "    La eliminación real puede tardar varios minutos."
-echo "    Puedes verificar el estado con:"
-echo "    az group show --name '${RG_NAME}'"
+log "Solicitud de eliminación procesada."
+log "La eliminación real de recursos Azure puede tardar varios minutos."

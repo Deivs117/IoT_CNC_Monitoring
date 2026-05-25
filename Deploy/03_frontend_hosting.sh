@@ -18,8 +18,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
 
+# ---------------------------------------------------------------------------
+# Helpers de log
+# ---------------------------------------------------------------------------
+log()  { echo "[03_frontend] $*"; }
+ok()   { echo "[03_frontend] ✓ $*"; }
+warn() { echo "[03_frontend] ⚠ $*"; }
+
 if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "ERROR: No se encontró ${ENV_FILE}. Ejecuta primero 01_infraestructura.sh." >&2
+  echo "[03_frontend] ERROR: No se encontró ${ENV_FILE}. Ejecuta primero 01_infraestructura.sh." >&2
   exit 1
 fi
 
@@ -28,7 +35,7 @@ source "${ENV_FILE}"
 
 for var in FRONTEND_SA FUNC_BASE_URL FUNC_APP_NAME RG_NAME; do
   if [[ -z "${!var:-}" ]]; then
-    echo "ERROR: Variable '${var}' está vacía en ${ENV_FILE}." >&2
+    echo "[03_frontend] ERROR: Variable '${var}' está vacía en ${ENV_FILE}." >&2
     exit 1
   fi
 done
@@ -36,18 +43,25 @@ done
 FRONTEND_SRC="${REPO_ROOT}/frontend"
 BUILD_DIR="${FRONTEND_SRC}"
 
-echo "==> [03] Desplegando frontend estático..."
+# Validar que existe el directorio frontend
+if [[ ! -d "${FRONTEND_SRC}" ]]; then
+  echo "[03_frontend] ERROR: Directorio '${FRONTEND_SRC}' no encontrado." >&2
+  exit 1
+fi
+
+log "Desplegando frontend estático..."
 
 # ---------------------------------------------------------------------------
 # 1. Habilitar Static Website
 # ---------------------------------------------------------------------------
-echo "==> Habilitando Static Website en '${FRONTEND_SA}'..."
+log "Habilitando Static Website en '${FRONTEND_SA}'..."
 az storage blob service-properties update \
   --account-name "${FRONTEND_SA}" \
   --static-website \
   --index-document "index.html" \
   --404-document "index.html" \
   --output none
+ok "Static Website habilitado."
 
 FRONTEND_URL=$(
   az storage account show \
@@ -72,16 +86,19 @@ cp -r "${FRONTEND_SRC}/." "${TMP_BUILD}/"
 # ---------------------------------------------------------------------------
 APP_JS="${TMP_BUILD}/app.js"
 if [[ -f "${APP_JS}" ]]; then
-  echo "==> Inyectando API_BASE_URL y API_FUNCTION_KEY en app.js..."
+  log "Inyectando API_BASE_URL y API_FUNCTION_KEY en app.js..."
   sed -i "s|__API_BASE_URL__|${FUNC_BASE_URL}|g" "${APP_JS}"
   sed -i "s|__API_FUNCTION_KEY__|${FUNC_KEY:-}|g" "${APP_JS}"
+  ok "Variables inyectadas en app.js."
+else
+  warn "app.js no encontrado en '${FRONTEND_SRC}'. Los placeholders no serán sustituidos."
 fi
 
 # ---------------------------------------------------------------------------
 # 4. Build npm (opcional — solo si existe package.json)
 # ---------------------------------------------------------------------------
 if [[ -f "${TMP_BUILD}/package.json" ]]; then
-  echo "==> Ejecutando npm install && npm run build..."
+  log "Ejecutando npm install && npm run build..."
   cd "${TMP_BUILD}"
   npm install --silent
   npm run build --silent
@@ -98,18 +115,19 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Subir archivos al contenedor $web
 # ---------------------------------------------------------------------------
-echo "==> Subiendo archivos al contenedor \$web de '${FRONTEND_SA}'..."
+log "Subiendo archivos al contenedor \$web de '${FRONTEND_SA}'..."
 az storage blob upload-batch \
   --account-name "${FRONTEND_SA}" \
   --destination "\$web" \
   --source "${BUILD_DIR}" \
   --overwrite true \
   --output none
+ok "Archivos de frontend subidos correctamente."
 
 # ---------------------------------------------------------------------------
 # 6. Actualizar CORS del Function App con la URL real
 # ---------------------------------------------------------------------------
-echo "==> Actualizando CORS del Function App con '${FRONTEND_URL}'..."
+log "Actualizando CORS del Function App con '${FRONTEND_URL}'..."
 az functionapp cors remove \
   --name "${FUNC_APP_NAME}" \
   --resource-group "${RG_NAME}" \
@@ -121,6 +139,7 @@ az functionapp cors add \
   --resource-group "${RG_NAME}" \
   --allowed-origins "${FRONTEND_URL}" \
   --output none
+ok "CORS de Function App restringido a: ${FRONTEND_URL}"
 
 # ---------------------------------------------------------------------------
 # 7. Guardar FRONTEND_URL en infra_outputs.env
@@ -131,5 +150,5 @@ else
   echo "FRONTEND_URL=\"${FRONTEND_URL}\"" >> "${ENV_FILE}"
 fi
 
-echo "==> [03] Frontend desplegado correctamente."
-echo "    Dashboard: ${FRONTEND_URL}"
+ok "Frontend desplegado correctamente."
+log "Dashboard: ${FRONTEND_URL}"

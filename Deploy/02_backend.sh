@@ -17,9 +17,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
+FUNC_SRC="${REPO_ROOT}/backend/azure_functions"
+
+# ---------------------------------------------------------------------------
+# Helpers de log
+# ---------------------------------------------------------------------------
+log()  { echo "[02_backend] $*"; }
+ok()   { echo "[02_backend] ✓ $*"; }
+warn() { echo "[02_backend] ⚠ $*"; }
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "ERROR: No se encontró ${ENV_FILE}. Ejecuta primero 01_infraestructura.sh." >&2
+  echo "[02_backend] ERROR: No se encontró ${ENV_FILE}. Ejecuta primero 01_infraestructura.sh." >&2
   exit 1
 fi
 
@@ -31,40 +39,57 @@ for var in RG_NAME LOCATION FUNC_APP_NAME FUNC_STORAGE FUNC_STORAGE_CONN \
            IOTHUB_EVENTS_CONNECTION_STRING IOTHUB_SERVICE_CONNECTION_STRING \
            IOT_HUB_EVENTHUB_NAME IOT_DEVICE_ID COSMOSDB_CONNECTION; do
   if [[ -z "${!var:-}" ]]; then
-    echo "ERROR: Variable '${var}' está vacía en ${ENV_FILE}." >&2
+    echo "[02_backend] ERROR: Variable '${var}' está vacía en ${ENV_FILE}." >&2
     exit 1
   fi
 done
 
 if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-  echo "ADVERTENCIA: TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID están vacíos. Las alertas de Telegram quedarán deshabilitadas." >&2
+  warn "TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID están vacíos. Las alertas de Telegram quedarán deshabilitadas."
 fi
 
-echo "==> [02] Desplegando Azure Functions '${FUNC_APP_NAME}'..."
+# Validar herramientas
+if ! command -v func &>/dev/null; then
+  echo "[02_backend] ERROR: 'func' (Azure Functions Core Tools) no está instalado." >&2
+  echo "  Instala con: npm install -g azure-functions-core-tools@4" >&2
+  exit 1
+fi
+
+# Validar directorio de código fuente
+if [[ ! -d "${FUNC_SRC}" ]]; then
+  echo "[02_backend] ERROR: Directorio '${FUNC_SRC}' no encontrado." >&2
+  echo "  Verifica que el repositorio esté clonado correctamente." >&2
+  exit 1
+fi
+
+log "Desplegando Azure Functions '${FUNC_APP_NAME}'..."
 
 # ---------------------------------------------------------------------------
-# 1. Crear Function App
+# 1. Crear Function App (idempotente)
 # ---------------------------------------------------------------------------
-echo "==> Creando Function App..."
-az functionapp create \
-  --name "${FUNC_APP_NAME}" \
-  --resource-group "${RG_NAME}" \
-  --storage-account "${FUNC_STORAGE}" \
-  --consumption-plan-location "${LOCATION}" \
-  --runtime python \
-  --runtime-version "3.11" \
-  --functions-version 4 \
-  --os-type Linux \
-  --output none 2>/dev/null || \
-az functionapp show \
-  --name "${FUNC_APP_NAME}" \
-  --resource-group "${RG_NAME}" \
-  --output none
+log "Verificando Function App '${FUNC_APP_NAME}'..."
+if az functionapp show \
+     --name "${FUNC_APP_NAME}" \
+     --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "Function App '${FUNC_APP_NAME}' ya existe — omitiendo creación."
+else
+  az functionapp create \
+    --name "${FUNC_APP_NAME}" \
+    --resource-group "${RG_NAME}" \
+    --storage-account "${FUNC_STORAGE}" \
+    --consumption-plan-location "${LOCATION}" \
+    --runtime python \
+    --runtime-version "3.11" \
+    --functions-version 4 \
+    --os-type Linux \
+    --output none
+  ok "Function App '${FUNC_APP_NAME}' creada (Python 3.11, consumption plan)."
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Inyectar App Settings (sin imprimir valores sensibles)
 # ---------------------------------------------------------------------------
-echo "==> Configurando App Settings..."
+log "Configurando App Settings..."
 az functionapp config appsettings set \
   --name "${FUNC_APP_NAME}" \
   --resource-group "${RG_NAME}" \
@@ -84,18 +109,20 @@ az functionapp config appsettings set \
     "HUM_MAX=${HUM_MAX:-80.0}" \
     "VIBRATION_ANOMALY_THRESHOLD=${VIBRATION_ANOMALY_THRESHOLD:-0.80}" \
   --output none
+ok "App Settings configurados."
 
 # ---------------------------------------------------------------------------
 # 3. Publicar código
 # ---------------------------------------------------------------------------
-echo "==> Publicando código de Azure Functions desde backend/azure_functions/..."
-cd "${REPO_ROOT}/backend/azure_functions"
+log "Publicando código de Azure Functions desde backend/azure_functions/..."
+cd "${FUNC_SRC}"
 func azure functionapp publish "${FUNC_APP_NAME}" --python --build remote
+ok "Código publicado en '${FUNC_APP_NAME}'."
 
 # ---------------------------------------------------------------------------
 # 4. Obtener URL base y key por defecto
 # ---------------------------------------------------------------------------
-echo "==> Obteniendo URL y key del Function App..."
+log "Obteniendo URL y key del Function App..."
 FUNC_BASE_URL="https://${FUNC_APP_NAME}.azurewebsites.net/api"
 
 FUNC_KEY=$(
@@ -109,7 +136,7 @@ FUNC_KEY=$(
 # ---------------------------------------------------------------------------
 # 5. Configurar CORS inicial (se actualizará con la URL real en 03_frontend.sh)
 # ---------------------------------------------------------------------------
-echo "==> Configurando CORS temporal (*)..."
+log "Configurando CORS temporal (*)..."
 az functionapp cors add \
   --name "${FUNC_APP_NAME}" \
   --resource-group "${RG_NAME}" \
@@ -129,5 +156,5 @@ else
   echo "FUNC_KEY=\"${FUNC_KEY}\"" >> "${ENV_FILE}"
 fi
 
-echo "==> [02] Azure Functions desplegadas correctamente."
-echo "    URL base: ${FUNC_BASE_URL}"
+ok "Azure Functions desplegadas correctamente."
+log "URL base: ${FUNC_BASE_URL}"

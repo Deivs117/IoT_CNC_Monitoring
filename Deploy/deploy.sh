@@ -59,6 +59,15 @@ fi
 SUBSCRIPTION=$(az account show --query "name" --output tsv)
 echo "    Suscripción activa: ${SUBSCRIPTION}"
 
+# Validar func CLI solo si el backend va a desplegarse
+if [[ "${RUN_BACKEND}" == "true" ]]; then
+  if ! command -v func &>/dev/null; then
+    echo "ERROR: 'func' (Azure Functions Core Tools) no está instalado." >&2
+    echo "  Instala con: npm install -g azure-functions-core-tools@4" >&2
+    exit 1
+  fi
+fi
+
 DEPLOY_START=$(date +%s)
 
 # ---------------------------------------------------------------------------

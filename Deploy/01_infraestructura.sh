@@ -18,6 +18,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
 
 # ---------------------------------------------------------------------------
+# Helpers de log
+# ---------------------------------------------------------------------------
+log()  { echo "[01_infra] $*"; }
+ok()   { echo "[01_infra] ✓ $*"; }
+warn() { echo "[01_infra] ⚠ $*"; }
+
+# ---------------------------------------------------------------------------
 # Valores por defecto (override con variables de entorno antes de ejecutar)
 # ---------------------------------------------------------------------------
 RG_NAME="${RG_NAME:-rg-cnc-iot}"
@@ -34,101 +41,146 @@ HASH_SUFFIX=$(echo -n "${IOT_HUB_NAME}" | md5sum | head -c 8)
 FUNC_STORAGE="${FUNC_STORAGE:-cnciotfunc${HASH_SUFFIX}}"
 FRONTEND_SA="${FRONTEND_SA:-cnciotfront${HASH_SUFFIX}}"
 
-echo "==> [01] Iniciando aprovisionamiento de infraestructura..."
-echo "    RG:          ${RG_NAME}"
-echo "    Ubicación:   ${LOCATION}"
-echo "    IoT Hub:     ${IOT_HUB_NAME}"
-echo "    Cosmos DB:   ${COSMOS_ACCOUNT}"
+log "Iniciando aprovisionamiento de infraestructura..."
+log "  RG:          ${RG_NAME}"
+log "  Ubicación:   ${LOCATION}"
+log "  IoT Hub:     ${IOT_HUB_NAME}"
+log "  Cosmos DB:   ${COSMOS_ACCOUNT}"
 
 # ---------------------------------------------------------------------------
 # 1. Resource Group
 # ---------------------------------------------------------------------------
-echo "==> Creando Resource Group '${RG_NAME}'..."
-az group create \
-  --name "${RG_NAME}" \
-  --location "${LOCATION}" \
-  --output none
+log "Verificando Resource Group '${RG_NAME}'..."
+if az group show --name "${RG_NAME}" &>/dev/null; then
+  warn "Resource Group '${RG_NAME}' ya existe — omitiendo creación."
+else
+  az group create \
+    --name "${RG_NAME}" \
+    --location "${LOCATION}" \
+    --output none
+  ok "Resource Group '${RG_NAME}' creado en '${LOCATION}'."
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Azure IoT Hub (F1 free — upgrade a S1 en producción)
 # ---------------------------------------------------------------------------
-echo "==> Creando IoT Hub '${IOT_HUB_NAME}'..."
-az iot hub create \
-  --name "${IOT_HUB_NAME}" \
-  --resource-group "${RG_NAME}" \
-  --location "${LOCATION}" \
-  --sku F1 \
-  --partition-count 2 \
-  --output none 2>/dev/null || \
-az iot hub show \
-  --name "${IOT_HUB_NAME}" \
-  --resource-group "${RG_NAME}" \
-  --output none
+log "Verificando IoT Hub '${IOT_HUB_NAME}'..."
+if az iot hub show --name "${IOT_HUB_NAME}" --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "IoT Hub '${IOT_HUB_NAME}' ya existe — omitiendo creación."
+else
+  az iot hub create \
+    --name "${IOT_HUB_NAME}" \
+    --resource-group "${RG_NAME}" \
+    --location "${LOCATION}" \
+    --sku F1 \
+    --partition-count 2 \
+    --output none
+  ok "IoT Hub '${IOT_HUB_NAME}' creado (SKU F1)."
+fi
 
 # Registro del dispositivo ESP32
-echo "==> Registrando dispositivo '${IOT_DEVICE_ID}' en IoT Hub..."
-az iot hub device-identity create \
-  --hub-name "${IOT_HUB_NAME}" \
-  --device-id "${IOT_DEVICE_ID}" \
-  --output none 2>/dev/null || true
+log "Verificando dispositivo '${IOT_DEVICE_ID}' en IoT Hub..."
+if az iot hub device-identity show \
+     --hub-name "${IOT_HUB_NAME}" \
+     --device-id "${IOT_DEVICE_ID}" &>/dev/null; then
+  warn "Dispositivo '${IOT_DEVICE_ID}' ya existe — omitiendo creación."
+else
+  az iot hub device-identity create \
+    --hub-name "${IOT_HUB_NAME}" \
+    --device-id "${IOT_DEVICE_ID}" \
+    --output none
+  ok "Dispositivo '${IOT_DEVICE_ID}' registrado en IoT Hub."
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Azure Cosmos DB — modo Serverless
 # ---------------------------------------------------------------------------
-echo "==> Creando cuenta Cosmos DB '${COSMOS_ACCOUNT}' (Serverless)..."
-az cosmosdb create \
-  --name "${COSMOS_ACCOUNT}" \
-  --resource-group "${RG_NAME}" \
-  --locations regionName="${LOCATION}" failoverPriority=0 isZoneRedundant=false \
-  --default-consistency-level "Session" \
-  --capabilities EnableServerless \
-  --output none
+log "Verificando cuenta Cosmos DB '${COSMOS_ACCOUNT}'..."
+if az cosmosdb show --name "${COSMOS_ACCOUNT}" --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "Cuenta Cosmos DB '${COSMOS_ACCOUNT}' ya existe — omitiendo creación."
+else
+  az cosmosdb create \
+    --name "${COSMOS_ACCOUNT}" \
+    --resource-group "${RG_NAME}" \
+    --locations regionName="${LOCATION}" failoverPriority=0 isZoneRedundant=false \
+    --default-consistency-level "Session" \
+    --capabilities EnableServerless \
+    --output none
+  ok "Cuenta Cosmos DB '${COSMOS_ACCOUNT}' creada (Serverless)."
+fi
 
-echo "==> Creando base de datos '${COSMOS_DB}'..."
-az cosmosdb sql database create \
-  --account-name "${COSMOS_ACCOUNT}" \
-  --resource-group "${RG_NAME}" \
-  --name "${COSMOS_DB}" \
-  --output none
+log "Verificando base de datos Cosmos '${COSMOS_DB}'..."
+if az cosmosdb sql database show \
+     --account-name "${COSMOS_ACCOUNT}" \
+     --resource-group "${RG_NAME}" \
+     --name "${COSMOS_DB}" &>/dev/null; then
+  warn "Base de datos '${COSMOS_DB}' ya existe — omitiendo creación."
+else
+  az cosmosdb sql database create \
+    --account-name "${COSMOS_ACCOUNT}" \
+    --resource-group "${RG_NAME}" \
+    --name "${COSMOS_DB}" \
+    --output none
+  ok "Base de datos '${COSMOS_DB}' creada."
+fi
 
-echo "==> Creando contenedor '${COSMOS_CONTAINER}' (partition-key: /device_id)..."
-az cosmosdb sql container create \
-  --account-name "${COSMOS_ACCOUNT}" \
-  --resource-group "${RG_NAME}" \
-  --database-name "${COSMOS_DB}" \
-  --name "${COSMOS_CONTAINER}" \
-  --partition-key-path "/device_id" \
-  --output none
+log "Verificando contenedor Cosmos '${COSMOS_CONTAINER}'..."
+if az cosmosdb sql container show \
+     --account-name "${COSMOS_ACCOUNT}" \
+     --resource-group "${RG_NAME}" \
+     --database-name "${COSMOS_DB}" \
+     --name "${COSMOS_CONTAINER}" &>/dev/null; then
+  warn "Contenedor '${COSMOS_CONTAINER}' ya existe — omitiendo creación."
+else
+  az cosmosdb sql container create \
+    --account-name "${COSMOS_ACCOUNT}" \
+    --resource-group "${RG_NAME}" \
+    --database-name "${COSMOS_DB}" \
+    --name "${COSMOS_CONTAINER}" \
+    --partition-key-path "/device_id" \
+    --output none
+  ok "Contenedor '${COSMOS_CONTAINER}' creado (partition-key: /device_id)."
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Storage Account para Azure Functions
 # ---------------------------------------------------------------------------
-echo "==> Creando Storage Account para Functions '${FUNC_STORAGE}'..."
-az storage account create \
-  --name "${FUNC_STORAGE}" \
-  --resource-group "${RG_NAME}" \
-  --location "${LOCATION}" \
-  --sku Standard_LRS \
-  --kind StorageV2 \
-  --output none
+log "Verificando Storage Account para Functions '${FUNC_STORAGE}'..."
+if az storage account show --name "${FUNC_STORAGE}" --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "Storage account '${FUNC_STORAGE}' ya existe — omitiendo creación."
+else
+  az storage account create \
+    --name "${FUNC_STORAGE}" \
+    --resource-group "${RG_NAME}" \
+    --location "${LOCATION}" \
+    --sku Standard_LRS \
+    --kind StorageV2 \
+    --output none
+  ok "Storage account '${FUNC_STORAGE}' creado."
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Storage Account para Frontend (Static Website)
 # ---------------------------------------------------------------------------
-echo "==> Creando Storage Account para Frontend '${FRONTEND_SA}'..."
-az storage account create \
-  --name "${FRONTEND_SA}" \
-  --resource-group "${RG_NAME}" \
-  --location "${LOCATION}" \
-  --sku Standard_LRS \
-  --kind StorageV2 \
-  --output none
+log "Verificando Storage Account para Frontend '${FRONTEND_SA}'..."
+if az storage account show --name "${FRONTEND_SA}" --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "Storage account '${FRONTEND_SA}' ya existe — omitiendo creación."
+else
+  az storage account create \
+    --name "${FRONTEND_SA}" \
+    --resource-group "${RG_NAME}" \
+    --location "${LOCATION}" \
+    --sku Standard_LRS \
+    --kind StorageV2 \
+    --output none
+  ok "Storage account '${FRONTEND_SA}' creado."
+fi
 
 # ---------------------------------------------------------------------------
 # 6. Extraer cadenas de conexión y guardar en infra_outputs.env
 #    Las variables sensibles se guardan sin imprimirlas en stdout.
 # ---------------------------------------------------------------------------
-echo "==> Extrayendo cadenas de conexión..."
+log "Extrayendo cadenas de conexión..."
 
 # Event Hub-compatible endpoint used by the telemetry_processor EventHub trigger.
 # Format: Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=...
@@ -180,11 +232,10 @@ FUNC_STORAGE_CONN=$(
 # Escribir infra_outputs.env (sin mostrar valores sensibles en consola)
 # ---------------------------------------------------------------------------
 if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-  echo "ADVERTENCIA: TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID no están definidos." \
-       "Las alertas de Telegram quedarán inactivas hasta configurarlas en App Settings." >&2
+  warn "TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID no están definidos. Las alertas de Telegram quedarán inactivas hasta configurarlas en App Settings."
 fi
 
-echo "==> Guardando outputs en '${ENV_FILE}'..."
+log "Guardando outputs en '${ENV_FILE}'..."
 cat > "${ENV_FILE}" <<ENVEOF
 # Generado automáticamente por 01_infraestructura.sh — no modificar manualmente
 RG_NAME="${RG_NAME}"
@@ -214,5 +265,5 @@ ENVEOF
 
 chmod 600 "${ENV_FILE}"
 
-echo "==> [01] Infraestructura aprovisionada correctamente."
-echo "    Archivo de outputs: ${ENV_FILE}"
+ok "Infraestructura aprovisionada correctamente."
+log "Archivo de outputs: ${ENV_FILE}"

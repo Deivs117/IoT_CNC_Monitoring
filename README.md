@@ -1,14 +1,14 @@
-# cnc-pcb-monitoreo
+# IoT CNC PCB Monitor
 
-Sistema IoT + Edge AI + Serverless para monitoreo analítico y predictivo de una fresadora CNC usada en manufactura de PCBs.
+Sistema IoT + Edge AI + Serverless para monitoreo analítico y preventivo de una fresadora CNC usada en manufactura de PCBs.
 
 ---
 
 ## 1. Objetivo del proyecto
 
-`cnc-pcb-monitoreo` integra firmware embebido, funciones serverless en Azure y un dashboard web para detectar en tiempo real desviaciones de temperatura, humedad y vibración que puedan dañar placas de cobre o romper herramientas.
+`IoT_CNC_Monitoring` integra firmware embebido, funciones serverless en Azure y un dashboard web para detectar en tiempo real desviaciones de temperatura, humedad y vibración que puedan dañar placas de cobre o romper herramientas.
 
-La arquitectura queda preparada para integrar más adelante una **ESP32-CAM** y una capa de visión artificial sin rediseñar el backend ni el esquema de almacenamiento.
+La arquitectura está preparada para integrar más adelante una **ESP32-CAM** y una capa de visión artificial sin rediseñar el backend ni el esquema de almacenamiento.
 
 ---
 
@@ -16,7 +16,10 @@ La arquitectura queda preparada para integrar más adelante una **ESP32-CAM** y 
 
 ```
 ESP32 (MPU-6050 + DHT22 + TF Lite)
-  │  MQTT / MQTTS → Azure IoT Hub
+  │  MQTT → Mosquitto (broker local)
+  ▼
+mqtt_bridge.py  (puente local Python)
+  │  MQTT con TLS → Azure IoT Hub
   ▼
 Azure IoT Hub
   │  Event Hub-compatible endpoint
@@ -24,7 +27,7 @@ Azure IoT Hub
 Azure Function: telemetry_processor  ←── EventHub Trigger
   │  • Parsea payload JSON
   │  • Evalúa alertas (temperatura, humedad, vibración, anomaly score)
-  │  • Envía notificación por Telegram si hay alerta
+  │  • Envía notificación por Telegram si hay alerta (opcional)
   │  • Escribe documento en Cosmos DB vía Output Binding
   ▼
 Azure Cosmos DB (Serverless)
@@ -40,7 +43,7 @@ Azure Cosmos DB (Serverless)
               ▼
            ESP32: recibe ON / OFF / RESET → GPIO actuador
   ▼
-Frontend (Azure Static Website)
+Frontend (Azure Static Website / GitHub Pages / Vercel)
   Dashboard oscuro con métricas, tabla, control y placeholder de cámara.
 ```
 
@@ -49,7 +52,7 @@ Frontend (Azure Static Website)
 ## 3. Estructura del repositorio
 
 ```text
-cnc-pcb-monitoreo/
+IoT_CNC_Monitoring/
 ├── .gitignore
 ├── README.md
 ├── firmware/
@@ -59,9 +62,11 @@ cnc-pcb-monitoreo/
 │   │   ├── edge_impulse_vibration.h
 │   │   └── sensors.h
 │   └── cnc_camera_node/
-│       └── .gitkeep                ← Reservado para ESP32-CAM
+│       └── .gitkeep                ← Reservado para ESP32-CAM (futuro)
 ├── backend/
-│   ├── requirements.txt            ← Dependencias (dev local)
+│   ├── README.md                   ← Documentación del backend
+│   ├── mqtt_bridge.py              ← Puente Mosquitto → Azure IoT Hub
+│   ├── requirements.txt            ← Dependencias del bridge (paho-mqtt, azure-iot-device)
 │   └── azure_functions/            ← Raíz del Function App
 │       ├── host.json
 │       ├── local.settings.json     ← Variables locales (no commitear con valores reales)
@@ -72,22 +77,23 @@ cnc-pcb-monitoreo/
 │       ├── telemetry_processor/    ← Ingestión IoT Hub → Cosmos DB
 │       │   ├── __init__.py
 │       │   └── function.json
-│       ├── get_datos/              ← GET /api/datos (últimos 100 registros)
+│       ├── get_datos/              ← GET /api/datos
 │       │   ├── __init__.py
 │       │   └── function.json
-│       ├── descargar_csv/          ← GET /api/datos/csv (descarga CSV)
+│       ├── descargar_csv/          ← GET /api/datos/csv
 │       │   ├── __init__.py
 │       │   └── function.json
 │       └── control_actuador/       ← POST /api/actuador (ON/OFF/RESET)
 │           ├── __init__.py
 │           └── function.json
 ├── frontend/
+│   ├── README.md                   ← Documentación del frontend
 │   ├── index.html                  ← Dashboard oscuro CNC PCB
 │   ├── app.js                      ← Lógica de UI (polling, actuador, CSV)
-│   └── style.css                   ← Tema oscuro con tarjeta placeholder de cámara
+│   └── style.css                   ← Tema oscuro
 └── Deploy/
     ├── deploy.sh                   ← Orquestador (flags: --no-infra, --no-front, etc.)
-    ├── 01_infraestructura.sh       ← RG + IoT Hub + Cosmos DB Serverless + Storage
+    ├── 01_infraestructura.sh       ← RG + IoT Hub + Cosmos DB Serverless + Storage Accounts
     ├── 02_backend.sh               ← Function App + App Settings + publicación
     ├── 03_frontend_hosting.sh      ← Static Website + inyección de variables + CORS
     ├── 04_cleanup.sh               ← Eliminación del entorno (confirmación interactiva)
@@ -141,13 +147,13 @@ Payload publicado por el nodo principal vía MQTT:
     "reasons": [],
     "telegram_sent": false
   },
-  "raw_payload": { "..." : "..." }
+  "raw_payload": { "...": "..." }
 }
 ```
 
 ---
 
-## 6. Azure Functions — descripción de endpoints
+## 6. Azure Functions — endpoints
 
 | Función | Trigger | Ruta | Auth |
 |---|---|---|---|
@@ -172,7 +178,7 @@ Payload publicado por el nodo principal vía MQTT:
 { "comando": "ON" }
 ```
 Comandos válidos: `ON`, `OFF`, `RESET`.
-El `device_id` se fuerza siempre desde `IOT_DEVICE_ID` (variable de entorno), ignorando lo que envíe el cliente.
+El `device_id` se fuerza desde `IOT_DEVICE_ID` (variable de entorno), ignorando lo que envíe el cliente.
 
 ---
 
@@ -185,18 +191,20 @@ Para desarrollo local, completar `backend/azure_functions/local.settings.json`.
 |---|---|
 | `AzureWebJobsStorage` | Cadena de conexión del Storage Account de Functions |
 | `FUNCTIONS_WORKER_RUNTIME` | `python` |
-| `IOTHUB_EVENTS_CONNECTION_STRING` | Endpoint Event Hub-compatible del IoT Hub (política `service`) |
+| `IOTHUB_EVENTS_CONNECTION_STRING` | **Endpoint Event Hub-compatible** del IoT Hub — formato `Endpoint=sb://...` (para el trigger de `telemetry_processor`) |
 | `IOT_HUB_EVENTHUB_NAME` | Nombre interno del Event Hub del IoT Hub |
-| `IOTHUB_SERVICE_CONNECTION_STRING` | Cadena de conexión del servicio IoT Hub (Direct Methods + C2D) |
+| `IOTHUB_SERVICE_CONNECTION_STRING` | Cadena de conexión del servicio IoT Hub — formato `HostName=...` (para Direct Methods y C2D) |
 | `IOT_DEVICE_ID` | ID del dispositivo ESP32 registrado en IoT Hub |
 | `COSMOSDB_CONNECTION` | Cadena de conexión primaria de Cosmos DB |
-| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (de @BotFather) |
-| `TELEGRAM_CHAT_ID` | ID del chat o grupo de Telegram para alertas |
+| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (de @BotFather) — opcional |
+| `TELEGRAM_CHAT_ID` | ID del chat o grupo de Telegram para alertas — opcional |
 | `TEMP_MIN` | Temperatura mínima normal (default: `15.0` °C) |
 | `TEMP_MAX` | Temperatura máxima normal (default: `45.0` °C) |
 | `HUM_MIN` | Humedad mínima normal (default: `20.0` %) |
 | `HUM_MAX` | Humedad máxima normal (default: `80.0` %) |
 | `VIBRATION_ANOMALY_THRESHOLD` | Score mínimo para disparar alerta (default: `0.80`) |
+
+> **Importante:** `IOTHUB_EVENTS_CONNECTION_STRING` e `IOTHUB_SERVICE_CONNECTION_STRING` son cadenas con **formatos distintos**. El script `01_infraestructura.sh` las obtiene automáticamente con los comandos correctos del az CLI.
 
 ---
 
@@ -210,12 +218,9 @@ az login
 
 # Instalar Azure Functions Core Tools
 npm install -g azure-functions-core-tools@4 --unsafe-perm true
-
-# (Opcional) Instalar dependencias locales
-pip install -r backend/requirements.txt
 ```
 
-### Variables de Telegram (antes de ejecutar)
+### Variables de Telegram (opcionales — antes de ejecutar)
 
 ```bash
 export TELEGRAM_BOT_TOKEN="<token>"
@@ -259,8 +264,16 @@ cd Deploy/
 
 ---
 
-## 10. Extensibilidad
+## 10. Estado del proyecto y extensibilidad
 
+### Listo para producción
+- Pipeline completo: ESP32 → MQTT → IoT Hub → Cosmos DB → Dashboard
+- Control de actuador (3 métodos en cascada: Direct Method, C2D SDK, REST C2D)
+- Alertas de Telegram (opcional, se activa solo si los tokens están configurados)
+- Scripts de despliegue repetibles con un solo comando
+
+### Futuras extensiones
 - **ESP32-CAM**: publicar `visual_anomaly_score` en el payload MQTT existente. El backend y la tabla del frontend ya leen ese campo; el placeholder del dashboard se activa automáticamente cuando el valor deja de ser `null`.
 - **Nuevas alertas**: agregar condiciones en `shared_code/alerts.py` sin tocar las demás funciones.
 - **Índices Cosmos DB**: para acelerar las consultas ordenadas por `timestamp`, agregar una política de índice compuesto `["/device_id ASC", "/timestamp DESC"]` en el contenedor `Telemetry`.
+- **Frontend en Vercel**: ver `frontend/README.md` para instrucciones de despliegue en Vercel y GitHub Pages.

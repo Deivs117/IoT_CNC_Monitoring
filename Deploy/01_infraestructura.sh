@@ -130,7 +130,19 @@ az storage account create \
 # ---------------------------------------------------------------------------
 echo "==> Extrayendo cadenas de conexión..."
 
+# Event Hub-compatible endpoint used by the telemetry_processor EventHub trigger.
+# Format: Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=...
 IOTHUB_EVENTS_CONNECTION_STRING=$(
+  az iot hub connection-string show \
+    --hub-name "${IOT_HUB_NAME}" \
+    --default-eventhub \
+    --query "connectionString" \
+    --output tsv 2>/dev/null
+)
+
+# IoT Hub service connection string used by control_actuador (Direct Methods + C2D).
+# Format: HostName=<hub>.azure-devices.net;SharedAccessKeyName=service;SharedAccessKey=...
+IOTHUB_SERVICE_CONNECTION_STRING=$(
   az iot hub connection-string show \
     --hub-name "${IOT_HUB_NAME}" \
     --policy-name service \
@@ -138,8 +150,6 @@ IOTHUB_EVENTS_CONNECTION_STRING=$(
     --query "connectionString" \
     --output tsv 2>/dev/null
 )
-
-IOTHUB_SERVICE_CONNECTION_STRING="${IOTHUB_EVENTS_CONNECTION_STRING}"
 
 IOT_HUB_EVENTHUB_NAME=$(
   az iot hub show \

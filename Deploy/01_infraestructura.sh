@@ -21,7 +21,7 @@ ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
 # Valores por defecto (override con variables de entorno antes de ejecutar)
 # ---------------------------------------------------------------------------
 RG_NAME="${RG_NAME:-rg-cnc-iot}"
-LOCATION="${LOCATION:-eastus}"
+LOCATION="${LOCATION:-centralus}"
 IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub}"
 IOT_DEVICE_ID="${IOT_DEVICE_ID:-cnc_fresadora_01}"
 COSMOS_ACCOUNT="${COSMOS_ACCOUNT:-cnc-iot-cosmos}"

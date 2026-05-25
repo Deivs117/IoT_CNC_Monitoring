@@ -100,26 +100,125 @@ ls -la
 ls -la Deploy
 ```
 
----
-
 # 7. Orden natural del despliegue
 
-La secuencia estándar es:
+La secuencia recomendada para desplegar el proyecto es la siguiente:
+
+## Opción A: ejecución paso a paso
 
 ```bash
-Deploy/01_infraestructura.sh
-Deploy/02_backend.sh
-Deploy/03_frontend_hosting.sh
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash 01_infraestructura.sh
+bash 02_backend.sh
+bash 03_frontend_hosting.sh
 ```
 
-O usando el orquestador:
+## Opción B: uso del orquestador principal
 
 ```bash
-cd Deploy
+cd ~/IoT_CNC_Monitoring/Deploy
+
 bash deploy.sh
 ```
 
+## Opción C: despliegue parcial
+
+### Solo infraestructura
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --only-infra
+```
+
+### Solo backend
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --only-backend
+```
+
+### Solo frontend
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --only-front
+```
+
+### Omitir infraestructura
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --no-infra
+```
+
+### Omitir backend
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --no-backend
+```
+
+### Omitir frontend
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+bash deploy.sh --no-front
+```
+
 ---
+
+# Hacer ejecutables todos los scripts `.sh`
+
+Si quieres ejecutar los scripts directamente con `./nombre_script.sh`, primero debes darles permisos de ejecución.
+
+## Comando para hacer ejecutables todos los scripts de `Deploy/`
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+
+chmod +x *.sh
+```
+
+## Verificar permisos
+
+```bash
+ls -l *.sh
+```
+
+## Ejecutar después de dar permisos
+
+```bash
+./01_infraestructura.sh
+./02_backend.sh
+./03_frontend_hosting.sh
+./04_cleanup.sh
+./deploy.sh
+```
+
+---
+
+# Recomendación práctica
+
+Aunque los hagas ejecutables, para evitar errores de ruta o de contexto, sigue siendo buena práctica ejecutar desde la carpeta `Deploy/`:
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+./deploy.sh
+```
+
+O si prefieres no depender de permisos:
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+bash deploy.sh
+```
 
 # 8. Consideraciones importantes sobre Azure Cloud Shell
 

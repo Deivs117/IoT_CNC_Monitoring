@@ -47,6 +47,12 @@ log "  Ubicación:   ${LOCATION}"
 log "  IoT Hub:     ${IOT_HUB_NAME}"
 log "  Cosmos DB:   ${COSMOS_ACCOUNT}"
 
+if ! az extension show --name azure-iot >/dev/null 2>&1; then
+  echo "[01_infra] Instalando extensión azure-iot..."
+  az extension add --name azure-iot --yes
+fi
+az config set extension.use_dynamic_install=yes_without_prompt >/dev/null
+
 # ---------------------------------------------------------------------------
 # 1. Resource Group
 # ---------------------------------------------------------------------------

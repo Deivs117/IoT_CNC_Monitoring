@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
 import azure.functions as func
+from azure.cosmos import CosmosClient
 from requests import RequestException
 
 from shared_code.alerts import compose_telegram_message, evaluate_alert, send_telegram_alert
@@ -14,21 +16,36 @@ from shared_code.alerts import compose_telegram_message, evaluate_alert, send_te
 logger = logging.getLogger("telemetry_processor")
 RAW_EVENT_PREVIEW_LENGTH = 500
 
+_COSMOS_CONN      = os.environ.get("COSMOSDB_CONNECTION", "")
+_COSMOS_DB        = "CNCMonitor"
+_COSMOS_CONTAINER = "Telemetry"
 
-def main(events: List[func.EventHubEvent], documents: func.Out[func.DocumentList]) -> None:
-    batch = []
+# Instanciar el cliente una sola vez a nivel de módulo para reutilizarlo entre
+# invocaciones y evitar overhead de conexión innecesario.
+if not _COSMOS_CONN:
+    raise EnvironmentError(
+        "La variable de entorno COSMOSDB_CONNECTION no está configurada. "
+        "Revisa local.settings.json o la configuración de la Function App."
+    )
+_cosmos_container = (
+    CosmosClient.from_connection_string(_COSMOS_CONN)
+    .get_database_client(_COSMOS_DB)
+    .get_container_client(_COSMOS_CONTAINER)
+)
 
+
+def main(events: List[func.EventHubEvent]) -> None:
     for event in events:
         try:
-            payload = json.loads(event.get_body().decode("utf-8-sig"))
-            batch.append(_build_document(payload))
+            payload  = json.loads(event.get_body().decode("utf-8-sig"))
+            document = _build_document(payload)
+            _cosmos_container.upsert_item(document)
+            logger.info("Documento guardado en Cosmos DB: %s", document["id"])
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raw_preview = event.get_body().decode("utf-8", errors="replace")[:RAW_EVENT_PREVIEW_LENGTH]
             logger.exception("No fue posible procesar un evento: %s | body=%r", exc, raw_preview)
-
-    if batch:
-        documents.set(batch)
-        logger.info("Se enviaron %s documentos a Cosmos DB", len(batch))
+        except Exception as exc:  # pragma: no cover - runtime observability path
+            logger.exception("Error inesperado procesando evento: %s", exc)
 
 
 def _build_document(payload: Dict[str, Any]) -> Dict[str, Any]:

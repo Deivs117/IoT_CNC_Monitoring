@@ -37,6 +37,15 @@
 static const unsigned long SAMPLE_DELAY_MS = (unsigned long)EI_CLASSIFIER_INTERVAL_MS;
 
 // =============================================================================
+// Control de cadencia de publicación al cloud
+// La inferencia puede correr a la frecuencia del muestreo (SAMPLE_DELAY_MS),
+// pero la telemetría solo se publica al IoT Hub una vez cada 5 segundos para
+// no agotar la cuota diaria del tier gratuito (~8 000 mensajes/día).
+// =============================================================================
+#define PUBLISH_INTERVAL_MS 5000UL
+static unsigned long last_publish_ms = 0;
+
+// =============================================================================
 // Buffer de entrada para Edge Impulse (datos crudos intercalados: ax, ay, az, ...)
 // EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE = num_muestras × num_ejes
 // =============================================================================
@@ -541,7 +550,12 @@ void loop() {
                               result.classification[i].label,
                               result.classification[i].value);
             }
-            // publishTelemetry(result);
+            // Publicar al cloud solo si han transcurrido PUBLISH_INTERVAL_MS
+            unsigned long now_ms = millis();
+            if (now_ms - last_publish_ms >= PUBLISH_INTERVAL_MS) {
+                publishTelemetry(result);
+                last_publish_ms = now_ms;
+            }
         }
 
         ei_idx = 0;

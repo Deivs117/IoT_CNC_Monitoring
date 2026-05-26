@@ -541,7 +541,7 @@ void loop() {
                               result.classification[i].label,
                               result.classification[i].value);
             }
-            publishTelemetry(result);
+            // publishTelemetry(result);
         }
 
         ei_idx = 0;

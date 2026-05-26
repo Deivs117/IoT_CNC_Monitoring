@@ -27,6 +27,7 @@ build/
 firmware/cnc_main_node/config.h
 config.h
 firmware\cnc_main_node\config.h
+firmware/cnc_camera_node/**/camera_secrets.h
 
 # OS / editors
 .DS_Store

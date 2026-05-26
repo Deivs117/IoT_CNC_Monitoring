@@ -8,33 +8,35 @@ Sistema IoT + Edge AI + Serverless para monitoreo analítico y preventivo de una
 
 `IoT_CNC_Monitoring` integra firmware embebido, funciones serverless en Azure y un dashboard web para detectar en tiempo real desviaciones de temperatura, humedad y vibración que puedan dañar placas de cobre o romper herramientas.
 
-La arquitectura está preparada para integrar más adelante una **ESP32-CAM** y una capa de visión artificial sin rediseñar el backend ni el esquema de almacenamiento.
+El sistema incorpora además un **nodo ESP32-CAM independiente** con visión artificial Edge AI (Edge Impulse) para clasificar automáticamente el tipo de PCB posicionada en la bancada de la CNC, determinando la ruta de manufactura correspondiente.
 
 ---
 
 ## 2. Arquitectura de la solución
 
 ```
-ESP32 (MPU-6050 + DHT22 + TF Lite)
-  │  MQTT → Mosquitto (broker local)
-  ▼
-mqtt_bridge.py  (puente local Python)
-  │  MQTT con TLS → Azure IoT Hub
-  ▼
-Azure IoT Hub
-  │  Event Hub-compatible endpoint
-  ▼
-Azure Function: telemetry_processor  ←── EventHub Trigger
-  │  • Parsea payload JSON
-  │  • Evalúa alertas (temperatura, humedad, vibración, anomaly score)
-  │  • Envía notificación por Telegram si hay alerta (opcional)
-  │  • Escribe documento en Cosmos DB vía Output Binding
-  ▼
+ESP32 principal (MPU-6050 + DHT22 + TF Lite)          ESP32-CAM (OV2640 + Edge Impulse)
+  │  MQTT → Mosquitto (broker local)                     │  HTTP POST directo (sin MQTT)
+  ▼                                                       │
+mqtt_bridge.py  (puente local Python)                    │
+  │  MQTT con TLS → Azure IoT Hub                        │
+  ▼                                                       ▼
+Azure IoT Hub                              Azure Function: ingestar_camara ←── HTTP POST /api/camara
+  │  Event Hub-compatible endpoint                        │  • Valida pcb_class y probabilidades
+  ▼                                                       │  • Escribe documento en Cosmos DB
+Azure Function: telemetry_processor  ←── EventHub Trigger │
+  │  • Parsea payload JSON                                │
+  │  • Evalúa alertas (temperatura, humedad, vibración)   │
+  │  • Envía notificación Telegram si hay alerta          │
+  │  • Escribe documento en Cosmos DB vía Output Binding  │
+  ▼                                                       ▼
 Azure Cosmos DB (Serverless)
   Base de datos : CNCMonitor
   Contenedor    : Telemetry   (partition key: /device_id)
+  │   ├── device_id: "cnc_fresadora_01"  (nodo principal)
+  │   └── device_id: "cnc_camera_01"     (nodo cámara)
   │
-  ├── Azure Function: get_datos       GET  /api/datos
+  ├── Azure Function: get_datos       GET  /api/datos       (soporta ?device_id=)
   ├── Azure Function: descargar_csv   GET  /api/datos/csv
   └── Azure Function: control_actuador POST /api/actuador
               │  1. Direct Method (invoke_device_method)
@@ -44,7 +46,7 @@ Azure Cosmos DB (Serverless)
            ESP32: recibe ON / OFF / RESET → GPIO actuador
   ▼
 Frontend (Azure Static Website / GitHub Pages / Vercel)
-  Dashboard oscuro con métricas, tabla, control y placeholder de cámara.
+  Dashboard oscuro con métricas de sensores, clasificación PCB en tiempo real y control.
 ```
 
 ---
@@ -62,7 +64,14 @@ IoT_CNC_Monitoring/
 │   │   ├── edge_impulse_vibration.h
 │   │   └── sensors.h
 │   └── cnc_camera_node/
-│       └── .gitkeep                ← Reservado para ESP32-CAM (futuro)
+│       ├── capture_express/        ← Firmware de captura para dataset
+│       │   └── capture_express.ino   (GET /capture → JPEG crudo)
+│       ├── dataset_capture/        ← Automatización Python con UV/Astral
+│       │   ├── pyproject.toml
+│       │   ├── capture.py          (descarga imágenes por clase)
+│       │   └── README.md
+│       └── cnc_camera_node/        ← Firmware de inferencia Edge Impulse
+│           └── cnc_camera_node.ino   (clasifica PCB + publica cada 10s)
 ├── backend/
 │   ├── README.md                   ← Documentación del backend
 │   ├── mqtt_bridge.py              ← Puente Mosquitto → Azure IoT Hub
@@ -83,13 +92,16 @@ IoT_CNC_Monitoring/
 │       ├── descargar_csv/          ← GET /api/datos/csv
 │       │   ├── __init__.py
 │       │   └── function.json
-│       └── control_actuador/       ← POST /api/actuador (ON/OFF/RESET)
+│       ├── control_actuador/       ← POST /api/actuador (ON/OFF/RESET)
+│       │   ├── __init__.py
+│       │   └── function.json
+│       └── ingestar_camara/        ← POST /api/camara (telemetría ESP32-CAM)
 │           ├── __init__.py
 │           └── function.json
 ├── frontend/
 │   ├── README.md                   ← Documentación del frontend
 │   ├── index.html                  ← Dashboard oscuro CNC PCB
-│   ├── app.js                      ← Lógica de UI (polling, actuador, CSV)
+│   ├── app.js                      ← Lógica de UI (polling, cámara, actuador, CSV)
 │   └── style.css                   ← Tema oscuro
 └── Deploy/
     ├── deploy.sh                   ← Orquestador (flags: --no-infra, --no-front, etc.)
@@ -103,6 +115,8 @@ IoT_CNC_Monitoring/
 ---
 
 ## 4. Contrato JSON de telemetría
+
+### Nodo principal (cnc_fresadora_01)
 
 Payload publicado por el nodo principal vía MQTT:
 
@@ -122,11 +136,51 @@ Payload publicado por el nodo principal vía MQTT:
 }
 ```
 
-`visual_anomaly_score` queda en `null` hasta integrar la ESP32-CAM. El backend y el frontend ya están preparados para recibirlo.
+### Nodo ESP32-CAM (cnc_camera_01)
+
+Payload enviado por HTTP POST a `/api/camara`:
+
+```json
+{
+  "device_id": "cnc_camera_01",
+  "timestamp": 1716076810,
+  "camera": {
+    "pcb_class": "PCB_SMD",
+    "confidence": 0.94,
+    "model_version": "v1",
+    "inference_ms": 312,
+    "probabilities": {
+      "PCB_Mixta": 0.02,
+      "PCB_SMD":   0.94,
+      "PCB_TH":    0.03,
+      "Sin_PCB":   0.01
+    }
+  }
+}
+```
+
+#### Clases de clasificación PCB
+
+| Clase | Descripción |
+|---|---|
+| `PCB_Mixta` | PCB con componentes through-hole y SMD coexistiendo |
+| `PCB_SMD`   | PCB con componentes de montaje superficial únicamente |
+| `PCB_TH`    | PCB con componentes through-hole / inserción únicamente |
+| `Sin_PCB`   | Bancada vacía, sin placa visible |
+
+#### Lógica de publicación controlada (firmware)
+
+El firmware `cnc_camera_node.ino` publica únicamente cuando:
+1. Han transcurrido **≥ 10 segundos** desde la última publicación, **o**
+2. La clase predicha **cambió** respecto a la última inferencia publicada.
+
+Esto evita saturar el backend con lecturas redundantes.
 
 ---
 
 ## 5. Documento almacenado en Cosmos DB
+
+### Nodo principal
 
 ```json
 {
@@ -151,6 +205,31 @@ Payload publicado por el nodo principal vía MQTT:
 }
 ```
 
+### Nodo ESP32-CAM
+
+```json
+{
+  "id": "cnc_camera_01-1716076810-b3c4d5e6",
+  "device_id": "cnc_camera_01",
+  "device_type": "camera",
+  "timestamp": 1716076810,
+  "camera": {
+    "pcb_class": "PCB_SMD",
+    "confidence": 0.94,
+    "model_version": "v1",
+    "inference_ms": 312,
+    "probabilities": {
+      "PCB_Mixta": 0.02,
+      "PCB_SMD":   0.94,
+      "PCB_TH":    0.03,
+      "Sin_PCB":   0.01
+    }
+  }
+}
+```
+
+Ambos documentos coexisten en el mismo contenedor `Telemetry`, diferenciados por `device_id` (partition key).
+
 ---
 
 ## 6. Azure Functions — endpoints
@@ -161,6 +240,7 @@ Payload publicado por el nodo principal vía MQTT:
 | `get_datos` | HTTP GET | `/api/datos` | function |
 | `descargar_csv` | HTTP GET | `/api/datos/csv` | function |
 | `control_actuador` | HTTP POST | `/api/actuador` | function |
+| `ingestar_camara` | HTTP POST | `/api/camara` | function |
 
 ### `get_datos` — parámetros opcionales
 | Parámetro | Tipo | Default | Descripción |
@@ -268,12 +348,24 @@ cd Deploy/
 
 ### Listo para producción
 - Pipeline completo: ESP32 → MQTT → IoT Hub → Cosmos DB → Dashboard
+- Nodo ESP32-CAM independiente: HTTP POST → `ingestar_camara` → Cosmos DB → Dashboard
+- Clasificación PCB en tiempo real: `PCB_Mixta`, `PCB_SMD`, `PCB_TH`, `Sin_PCB`
+- Publicación controlada de cámara: cada 10 s o ante cambio de clase
 - Control de actuador (3 métodos en cascada: Direct Method, C2D SDK, REST C2D)
 - Alertas de Telegram (opcional, se activa solo si los tokens están configurados)
 - Scripts de despliegue repetibles con un solo comando
 
+### Flujo ESP32-CAM — primeros pasos
+
+1. **Captura del dataset**: cargar `firmware/cnc_camera_node/capture_express/capture_express.ino`, luego ejecutar:
+   ```bash
+   cd firmware/cnc_camera_node/dataset_capture
+   uv run capture.py --host 192.168.1.100 --class PCB_SMD --count 50
+   ```
+2. **Entrenar modelo**: subir imágenes a [Edge Impulse Studio](https://studio.edgeimpulse.com) y exportar la librería Arduino.
+3. **Compilar firmware de inferencia**: descomprimir la librería exportada junto a `cnc_camera_node.ino`, completar `WIFI_SSID`, `WIFI_PASSWORD` y `BACKEND_URL`, compilar y cargar.
+
 ### Futuras extensiones
-- **ESP32-CAM**: publicar `visual_anomaly_score` en el payload MQTT existente. El backend y la tabla del frontend ya leen ese campo; el placeholder del dashboard se activa automáticamente cuando el valor deja de ser `null`.
 - **Nuevas alertas**: agregar condiciones en `shared_code/alerts.py` sin tocar las demás funciones.
 - **Índices Cosmos DB**: para acelerar las consultas ordenadas por `timestamp`, agregar una política de índice compuesto `["/device_id ASC", "/timestamp DESC"]` en el contenedor `Telemetry`.
 - **Frontend en Vercel**: ver `frontend/README.md` para instrucciones de despliegue en Vercel y GitHub Pages.

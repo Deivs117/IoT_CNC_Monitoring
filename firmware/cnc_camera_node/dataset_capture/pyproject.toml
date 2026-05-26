@@ -1,0 +1,19 @@
+[project]
+name = "cnc-dataset-capture"
+version = "1.0.0"
+description = "Captura automatizada de dataset ESP32-CAM para Edge Impulse — IoT CNC PCB Monitor"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[tool.uv]
+dev-dependencies = []
+
+[project.scripts]
+capture = "capture:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

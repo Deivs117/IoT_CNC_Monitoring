@@ -23,6 +23,9 @@ Deploy/infra_outputs.env
 *.ino.cpp
 build/
 
+# Firmware config with real credentials (commit only the placeholder version)
+firmware/cnc_main_node/config.local.h
+
 # OS / editors
 .DS_Store
 .vscode/

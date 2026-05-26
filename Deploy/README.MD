@@ -292,6 +292,11 @@ export IOT_HUB_NAME="cnc-iot-hub"
 export IOT_DEVICE_ID="cnc_fresadora_01"
 export COSMOS_ACCOUNT="cnc-iot-cosmos"
 export FUNC_APP_NAME="cnc-iot-func"
+
+# INSTANCE_SUFFIX: sufijo corto y legible para Storage Accounts globalmente únicos.
+# Elige un valor estable y corto (ej. iniciales o alias del proyecto).
+# Con INSTANCE_SUFFIX="deivid" se crean: cnciotfuncdeivid, cnciotfrontdeivid
+export INSTANCE_SUFFIX="deivid"
 EOF
 ```
 
@@ -744,6 +749,7 @@ export IOT_HUB_NAME="cnc-iot-hub"
 export IOT_DEVICE_ID="cnc_fresadora_01"
 export COSMOS_ACCOUNT="cnc-iot-cosmos"
 export FUNC_APP_NAME="cnc-iot-func"
+export INSTANCE_SUFFIX="deivid"
 EOF
 
 chmod 600 ~/iot_cnc_secrets.env
@@ -1020,11 +1026,80 @@ Esto permite un flujo práctico, repetible y resistente a desconexiones sin depe
 
 - [ ] Abrí Azure Cloud Shell en modo Bash
 - [ ] Cloné el repositorio
-- [ ] Creé `~/iot_cnc_secrets.env`
+- [ ] Creé `~/iot_cnc_secrets.env` (incluye `INSTANCE_SUFFIX`)
 - [ ] Protegí el archivo con `chmod 600`
 - [ ] Ejecuté `source ~/iot_cnc_secrets.env`
 - [ ] Entré a `~/IoT_CNC_Monitoring/Deploy`
 - [ ] Ejecuté `bash deploy.sh`
 - [ ] Guardé backup de `infra_outputs.env`
+
+---
+
+# 24. Convención de nomenclatura de recursos Azure
+
+Todos los recursos del proyecto siguen una convención legible y predecible:
+
+| Recurso | Nombre | Notas |
+|---|---|---|
+| Resource Group | `rg-cnc-iot` | Prefijo `rg-` estándar Azure |
+| IoT Hub | `cnc-iot-hub` | Fijo y legible |
+| Dispositivo | `cnc_fresadora_01` | Underscore (restricción IoT Hub) |
+| Cosmos DB Account | `cnc-iot-cosmos` | Fijo y legible |
+| Cosmos DB | `CNCMonitor` | Base de datos lógica |
+| Contenedor | `Telemetry` | Partición `/device_id` |
+| Function App | `cnc-iot-func` | Fijo y legible |
+| Storage (Functions) | `cnciotfunc<INSTANCE_SUFFIX>` | Sufijo para unicidad global |
+| Storage (Frontend) | `cnciotfront<INSTANCE_SUFFIX>` | Sufijo para unicidad global |
+
+`INSTANCE_SUFFIX` debe ser un alias corto, alfanumérico, minúscula, fácil de recordar
+(ej. `deivid`, `prod`, `dev01`). Se define una vez en `~/iot_cnc_secrets.env` y se
+mantiene estable entre ejecuciones.
+
+Si no se define `INSTANCE_SUFFIX`, el script `01_infraestructura.sh` genera un sufijo
+de 6 caracteres (SHA256 truncado del `RG_NAME`) que es determinista entre ejecuciones
+del mismo entorno pero menos legible.
+
+---
+
+# 25. Configuración del firmware tras el despliegue
+
+Tras ejecutar `01_infraestructura.sh`, configura el firmware del ESP32:
+
+## Obtener credenciales del dispositivo
+
+```bash
+# FQDN del IoT Hub (copiar en config.h → IOT_HUB_HOST)
+echo "cnc-iot-hub.azure-devices.net"
+
+# Clave primaria del dispositivo (copiar en config.h → DEVICE_PRIMARY_KEY)
+az iot hub device-identity show \
+  --hub-name cnc-iot-hub \
+  --device-id cnc_fresadora_01 \
+  --query "authentication.symmetricKey.primaryKey" \
+  --output tsv
+```
+
+## Actualizar config.h
+
+```cpp
+constexpr char IOT_HUB_HOST[]       = "cnc-iot-hub.azure-devices.net";
+constexpr char DEVICE_ID[]          = "cnc_fresadora_01";
+constexpr char DEVICE_PRIMARY_KEY[] = "<clave_primaria_obtenida_arriba>";
+constexpr char WIFI_SSID[]          = "TU_SSID";
+constexpr char WIFI_PASSWORD[]      = "TU_PASSWORD";
+```
+
+## Instalar la librería de Edge Impulse en Arduino IDE
+
+1. Descarga el `.zip` desde Edge Impulse Studio:
+   `Deployment → Arduino library → CNC_Monitor_Project_inferencing`
+2. En Arduino IDE: `Sketch → Include Library → Add .ZIP Library`
+3. Selecciona el `.zip` descargado.
+4. Verifica que `CNC_Monitor_Project_inferencing.h` esté disponible.
+
+## Compilar y cargar
+
+El firmware compilará contra el SDK de Edge Impulse y publicará directamente
+a Azure IoT Hub (MQTTS, puerto 8883) con SAS token generado en el dispositivo.
 
 ---

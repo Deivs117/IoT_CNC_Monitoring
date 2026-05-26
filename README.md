@@ -14,40 +14,32 @@ El sistema incorpora además un **nodo ESP32-CAM independiente** con visión art
 
 ## 2. Arquitectura de la solución
 
+```mermaid
+graph TD
+    A["ESP32 principal\n(MPU-6050 + DHT22 + Edge Impulse)"] -->|MQTTS 8883| B[Azure IoT Hub]
+    C["ESP32-CAM\n(OV2640 + Edge Impulse PCB)"] -->|MQTTS 8883| B
+
+    B -->|EventHub trigger| D["Azure Function\ntelemetry_processor"]
+
+    D -->|detecta campo camera| E1["_build_camera_document()\nvalida pcb_class + probs"]
+    D -->|sin campo camera| E2["_build_vibration_document()\nanaliza sensores + alertas"]
+
+    E1 --> F[("Cosmos DB\nCNCMonitor/Telemetry\ndevice_id: cnc_camera_01")]
+    E2 --> F
+    E2 -->|si hay alerta| G[Telegram Bot]
+
+    F --> H["Azure Function\nget_datos  GET /api/datos"]
+    F --> I["Azure Function\ndescargar_csv  GET /api/datos/csv"]
+    H --> J["Frontend\nDashboard oscuro"]
+    I --> J
+
+    K["Azure Function\ncontrol_actuador  POST /api/actuador"] -->|Direct Method / C2D| A
+    J --> K
+
+    L["ingestar_camara\nPOST /api/camara\n(canal HTTP de depuración)"] --> F
 ```
-ESP32 principal (MPU-6050 + DHT22 + TF Lite)          ESP32-CAM (OV2640 + Edge Impulse)
-  │  MQTT → Mosquitto (broker local)                     │  HTTP POST directo (sin MQTT)
-  ▼                                                       │
-mqtt_bridge.py  (puente local Python)                    │
-  │  MQTT con TLS → Azure IoT Hub                        │
-  ▼                                                       ▼
-Azure IoT Hub                              Azure Function: ingestar_camara ←── HTTP POST /api/camara
-  │  Event Hub-compatible endpoint                        │  • Valida pcb_class y probabilidades
-  ▼                                                       │  • Escribe documento en Cosmos DB
-Azure Function: telemetry_processor  ←── EventHub Trigger │
-  │  • Parsea payload JSON                                │
-  │  • Evalúa alertas (temperatura, humedad, vibración)   │
-  │  • Envía notificación Telegram si hay alerta          │
-  │  • Escribe documento en Cosmos DB vía Output Binding  │
-  ▼                                                       ▼
-Azure Cosmos DB (Serverless)
-  Base de datos : CNCMonitor
-  Contenedor    : Telemetry   (partition key: /device_id)
-  │   ├── device_id: "cnc_fresadora_01"  (nodo principal)
-  │   └── device_id: "cnc_camera_01"     (nodo cámara)
-  │
-  ├── Azure Function: get_datos       GET  /api/datos       (soporta ?device_id=)
-  ├── Azure Function: descargar_csv   GET  /api/datos/csv
-  └── Azure Function: control_actuador POST /api/actuador
-              │  1. Direct Method (invoke_device_method)
-              │  2. SDK C2D  (send_c2d_message)
-              │  3. REST C2D (token SAS manual)
-              ▼
-           ESP32: recibe ON / OFF / RESET → GPIO actuador
-  ▼
-Frontend (Azure Static Website / GitHub Pages / Vercel)
-  Dashboard oscuro con métricas de sensores, clasificación PCB en tiempo real y control.
-```
+
+> **Nota:** `telemetry_processor` detecta automáticamente el tipo de payload: si contiene el campo `camera` lo trata como telemetría de la ESP32-CAM; de lo contrario lo procesa como telemetría del nodo principal (vibración/sensores). Ambos tipos coexisten en el mismo contenedor Cosmos DB identificados por `device_id`.
 
 ---
 
@@ -118,7 +110,7 @@ IoT_CNC_Monitoring/
 
 ### Nodo principal (cnc_fresadora_01)
 
-Payload publicado por el nodo principal vía MQTT:
+Payload publicado por el nodo principal vía MQTTS al topic `devices/cnc_fresadora_01/messages/events/`:
 
 ```json
 {
@@ -138,7 +130,7 @@ Payload publicado por el nodo principal vía MQTT:
 
 ### Nodo ESP32-CAM (cnc_camera_01)
 
-Payload enviado por HTTP POST a `/api/camara`:
+Payload publicado por el nodo de cámara vía MQTTS al topic `devices/cnc_camera_01/messages/events/`:
 
 ```json
 {
@@ -147,7 +139,7 @@ Payload enviado por HTTP POST a `/api/camara`:
   "camera": {
     "pcb_class": "PCB_SMD",
     "confidence": 0.94,
-    "model_version": "v1",
+    "model_version": "1.0.0",
     "inference_ms": 312,
     "probabilities": {
       "PCB_Mixta": 0.02,
@@ -174,7 +166,45 @@ El firmware `cnc_camera_node.ino` publica únicamente cuando:
 1. Han transcurrido **≥ 10 segundos** desde la última publicación, **o**
 2. La clase predicha **cambió** respecto a la última inferencia publicada.
 
-Esto evita saturar el backend con lecturas redundantes.
+Esto evita saturar el IoT Hub con lecturas redundantes y respeta la cuota del tier gratuito.
+
+#### Flujo de inferencia MQTT
+
+```mermaid
+sequenceDiagram
+    participant CAM as ESP32-CAM
+    participant EI as Edge Impulse SDK
+    participant HUB as Azure IoT Hub
+    participant FN as telemetry_processor
+    participant DB as Cosmos DB
+
+    CAM->>EI: capture frame (96×96 RGB565)
+    EI-->>CAM: InferenceResult {pcb_class, confidence, probs}
+    CAM->>CAM: shouldPublish? (timeout ≥10s o clase cambió)
+    CAM->>HUB: MQTTS publish devices/cnc_camera_01/messages/events/
+    HUB->>FN: EventHub trigger (payload JSON)
+    FN->>FN: detecta campo "camera" → _build_camera_document()
+    FN->>DB: upsert_item (device_type: camera)
+```
+
+---
+
+## 4b. Flujo de captura del dataset
+
+```mermaid
+flowchart LR
+    A([Operador]) -->|uv run capture.py\n--host IP --class CLASE| B[capture.py]
+    B -->|GET /capture| C[ESP32-CAM\nfirmware capture_express]
+    C -->|JPEG 800×600| B
+    B -->|OpenCV cv2.imshow| D[Ventana de preview\norientación, foco, luz]
+    D -->|ENTER / s| E{Usuario confirma?}
+    E -->|Sí| F[Ráfaga de capturas\nN imágenes con delay]
+    E -->|No / ESC| G([Cancelado])
+    F -->|valida Content-Type\ny tamaño mínimo| H[(dataset/CLASE/\nCLASE_timestamp_NNNN.jpg)]
+    H -->|subir a Edge Impulse| I[Entrenamiento del modelo]
+    I -->|exportar librería Arduino| J[CNC_PCB_Classifier_inferencing.h]
+```
+
 
 ---
 
@@ -357,13 +387,23 @@ cd Deploy/
 
 ### Flujo ESP32-CAM — primeros pasos
 
-1. **Captura del dataset**: cargar `firmware/cnc_camera_node/capture_express/capture_express.ino`, luego ejecutar:
+1. **Registrar el dispositivo cnc_camera_01 en IoT Hub:**
+   ```bash
+   az iot hub device-identity create \
+     --hub-name <hub-name> --device-id cnc_camera_01
+   # Obtener la clave primaria para camera_secrets.h:
+   az iot hub device-identity show \
+     --hub-name <hub-name> --device-id cnc_camera_01 \
+     --query "authentication.symmetricKey.primaryKey" --output tsv
+   ```
+2. **Captura del dataset**: cargar `firmware/cnc_camera_node/capture_express/capture_express.ino`, luego ejecutar:
    ```bash
    cd firmware/cnc_camera_node/dataset_capture
    uv run capture.py --host 192.168.1.100 --class PCB_SMD --count 50
+   # Para entornos sin pantalla: añadir --no-preview
    ```
-2. **Entrenar modelo**: subir imágenes a [Edge Impulse Studio](https://studio.edgeimpulse.com) y exportar la librería Arduino.
-3. **Compilar firmware de inferencia**: descomprimir la librería exportada junto a `cnc_camera_node.ino`, completar `WIFI_SSID`, `WIFI_PASSWORD` y `BACKEND_URL`, compilar y cargar.
+3. **Entrenar modelo**: subir imágenes a [Edge Impulse Studio](https://studio.edgeimpulse.com) y exportar la librería Arduino.
+4. **Compilar firmware de inferencia MQTT**: copiar `camera_secrets.h.template` → `camera_secrets.h`, rellenar `WIFI_SSID`, `WIFI_PASS`, `IOT_HUB_HOST` y `DEVICE_PRIMARY_KEY`. Instalar `PubSubClient` vía Library Manager. Compilar y cargar `cnc_camera_node.ino`.
 
 ### Futuras extensiones
 - **Nuevas alertas**: agregar condiciones en `shared_code/alerts.py` sin tocar las demás funciones.

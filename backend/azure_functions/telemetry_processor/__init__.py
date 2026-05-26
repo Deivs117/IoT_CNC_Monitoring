@@ -20,6 +20,10 @@ _COSMOS_CONN      = os.environ.get("COSMOSDB_CONNECTION", "")
 _COSMOS_DB        = "CNCMonitor"
 _COSMOS_CONTAINER = "Telemetry"
 
+# Must stay in sync with the Edge Impulse project label list exported to the Arduino library.
+# Update here whenever labels are added/removed from the model.
+VALID_PCB_CLASSES = frozenset({"PCB_Mixta", "PCB_SMD", "PCB_TH", "Sin_PCB"})
+
 # Instanciar el cliente una sola vez a nivel de módulo para reutilizarlo entre
 # invocaciones y evitar overhead de conexión innecesario.
 if not _COSMOS_CONN:
@@ -38,7 +42,11 @@ def main(events: List[func.EventHubEvent]) -> None:
     for event in events:
         try:
             payload  = json.loads(event.get_body().decode("utf-8-sig"))
-            document = _build_document(payload)
+            # Dispatch: camera payload tiene campo "camera"; vibración no.
+            if "camera" in payload:
+                document = _build_camera_document(payload)
+            else:
+                document = _build_vibration_document(payload)
             _cosmos_container.upsert_item(document)
             logger.info("Documento guardado en Cosmos DB: %s", document["id"])
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -48,7 +56,8 @@ def main(events: List[func.EventHubEvent]) -> None:
             logger.exception("Error inesperado procesando evento: %s", exc)
 
 
-def _build_document(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _build_vibration_document(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Construye el documento Cosmos DB para el nodo principal (vibración/sensores)."""
     device_id = str(payload.get("device_id") or "cnc_fresadora_01")
     timestamp = _coerce_timestamp(payload.get("timestamp"))
 
@@ -101,6 +110,40 @@ def _build_document(payload: Dict[str, Any]) -> Dict[str, Any]:
         document["alerts"]["telegram_sent"] = False
 
     return document
+
+
+def _build_camera_document(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Construye el documento Cosmos DB para el nodo ESP32-CAM (clasificación PCB)."""
+    device_id = str(payload.get("device_id") or "cnc_camera_01")
+    timestamp = _coerce_timestamp(payload.get("timestamp"))
+    camera    = payload.get("camera") or {}
+
+    # Normalizar probabilidades: incluir siempre las 4 clases
+    raw_probs   = camera.get("probabilities") or {}
+    probs_clean = {
+        cls: _coerce_float(raw_probs.get(cls), default=0.0)
+        for cls in sorted(VALID_PCB_CLASSES)
+    }
+
+    pcb_class = str(camera.get("pcb_class") or "Sin_PCB")
+    if pcb_class not in VALID_PCB_CLASSES:
+        logger.warning("unknown pcb_class '%s' — defaulting to 'Sin_PCB'", pcb_class)
+        pcb_class = "Sin_PCB"
+
+    return {
+        "id":          f"{device_id}-{timestamp}-{uuid.uuid4().hex[:8]}",
+        "device_id":   device_id,
+        "device_type": "camera",
+        "timestamp":   timestamp,
+        "camera": {
+            "pcb_class":     pcb_class,
+            "confidence":    _coerce_optional_float(camera.get("confidence")),
+            "inference_ms":  int(camera.get("inference_ms") or 0),
+            "model_version": str(camera.get("model_version") or "unknown"),
+            "probabilities": probs_clean,
+        },
+        "raw_payload": payload,
+    }
 
 
 def _coerce_timestamp(value: Any) -> int:

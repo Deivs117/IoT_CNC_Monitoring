@@ -2,22 +2,33 @@
 
 ## Arquitectura
 
-```
-ESP32-C3 (MPU-6050 + DHT22 + TF Lite Micro)
-  └── WiFi + MQTT (puerto 1883, sin TLS en microcontrolador)
-        └── Mosquitto (broker local)
-              └── mqtt_bridge.py  ← puente local Python
-                    └── Azure IoT Hub
-                          └── Event Hub (endpoint integrado)
-                                └── Azure Function: telemetry_processor
-                                      ├── Cosmos DB (CNCMonitor/Telemetry)
-                                      └── Telegram Bot (alertas opcionales)
+```mermaid
+flowchart TD
+    ESP1["ESP32 principal\ncnc_fresadora_01\nMPU-6050 + DHT22 + TF Lite"]
+    ESP2["ESP32-CAM\ncnc_camera_01\nOV2640 + Edge Impulse PCB"]
 
-Frontend (dashboard web)
-  ├── GET /api/datos        → Azure Function: get_datos       → Cosmos DB
-  ├── GET /api/datos/csv    → Azure Function: descargar_csv   → Cosmos DB
-  └── POST /api/actuador    → Azure Function: control_actuador → IoT Hub (Direct Method / C2D)
+    ESP1 -->|MQTTS 8883| HUB[Azure IoT Hub]
+    ESP2 -->|MQTTS 8883| HUB
+
+    HUB -->|EventHub trigger| TP["Azure Function\ntelemetry_processor"]
+    TP -->|campo camera ausente| VIB["_build_vibration_document()\nanalyzes sensors + alerts"]
+    TP -->|campo camera presente| CAM["_build_camera_document()\nvalidates pcb_class + probs"]
+    VIB -->|si alerta| TG[Telegram Bot]
+    VIB --> DB
+    CAM --> DB[("Cosmos DB\nCNCMonitor / Telemetry\npartition key: device_id")]
+
+    DB --> GD["Azure Function\nget_datos  GET /api/datos"]
+    DB --> CSV["Azure Function\ndescargar_csv  GET /api/datos/csv"]
+    GD --> FE[Frontend Dashboard]
+    CSV --> FE
+
+    FE --> CA["Azure Function\ncontrol_actuador  POST /api/actuador"]
+    CA -->|Direct Method / C2D| ESP1
+
+    ICAM["Azure Function\ningestar_camara\nPOST /api/camara\n(canal HTTP debug)"] --> DB
 ```
+
+> **Nota:** `telemetry_processor` detecta el tipo de payload por la presencia del campo `camera`. Ambos tipos coexisten en el mismo contenedor Cosmos DB identificados por `device_id` y `device_type`.
 
 ---
 
@@ -68,8 +79,19 @@ backend/
 - **Contenedor:** `Telemetry`
 - **Partition key:** `/device_id`
 
-### Dispositivo IoT Hub
-- **Device ID:** `cnc_fresadora_01` (debe coincidir con `DEVICE_ID` en `firmware/cnc_main_node/config.h`)
+### Dispositivos IoT Hub
+
+| Device ID | Firmware | Descripción |
+|---|---|---|
+| `cnc_fresadora_01` | `firmware/cnc_main_node/cnc_main_node.ino` | Nodo principal (sensores + vibración) |
+| `cnc_camera_01`   | `firmware/cnc_camera_node/cnc_camera_node/cnc_camera_node.ino` | Nodo cámara (clasificación PCB) |
+
+Ambos dispositivos deben registrarse en IoT Hub antes de cargar el firmware. Ver `Deploy/01_infraestructura.sh` o ejecutar:
+```bash
+az iot hub device-identity create --hub-name <hub-name> --device-id cnc_fresadora_01
+az iot hub device-identity create --hub-name <hub-name> --device-id cnc_camera_01
+```
+
 
 ---
 

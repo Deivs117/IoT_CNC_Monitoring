@@ -59,15 +59,10 @@
 // Ajustar el include a continuación con el nombre real del archivo generado:
 #include <CNC_PCB_Classifier_inferencing.h>
 
-// ── Credenciales WiFi ─────────────────────────────────────────────────────────
-#define WIFI_SSID        "TU_SSID"
-#define WIFI_PASS        "TU_PASSWORD"
-
-// ── Backend Azure Function ────────────────────────────────────────────────────
-// Reemplazar con la URL y clave reales del Function App.
-// Obtener la clave con: az functionapp keys list --name <app-name> --resource-group <rg>
-#define BACKEND_URL      "https://<func-app-name>.azurewebsites.net/api/camara"
-#define BACKEND_FUNC_KEY "<function-host-key>"
+// ── Credenciales WiFi y backend ───────────────────────────────────────────────
+// Copiar camera_secrets.h.template → camera_secrets.h y rellenar los valores.
+// camera_secrets.h está en .gitignore y NUNCA debe commitearse con credenciales reales.
+#include "camera_secrets.h"  // ← crear desde camera_secrets.h.template
 
 // ── Identificación del dispositivo ───────────────────────────────────────────
 #define DEVICE_ID        "cnc_camera_01"

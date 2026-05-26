@@ -280,7 +280,7 @@ async function fetchCameraData() {
 function renderCameraCard(item) {
   const cam   = item.camera || {};
   const cls   = cam.pcb_class || null;
-  const conf  = cam.confidence != null ? (cam.confidence * 100).toFixed(1) + "%" : null;
+  const conf  = cam.confidence != null ? `${(cam.confidence * 100).toFixed(1)}%` : null;
   const probs = cam.probabilities || {};
 
   // ── Tarjeta de clasificación ──────────────────────────────────────────────

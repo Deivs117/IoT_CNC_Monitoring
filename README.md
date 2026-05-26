@@ -360,7 +360,7 @@ cd Deploy/
 1. **Captura del dataset**: cargar `firmware/cnc_camera_node/capture_express/capture_express.ino`, luego ejecutar:
    ```bash
    cd firmware/cnc_camera_node/dataset_capture
-   uv run capture.py --ip 192.168.1.100 --class PCB_SMD --count 50
+   uv run capture.py --host 192.168.1.100 --class PCB_SMD --count 50
    ```
 2. **Entrenar modelo**: subir imágenes a [Edge Impulse Studio](https://studio.edgeimpulse.com) y exportar la librería Arduino.
 3. **Compilar firmware de inferencia**: descomprimir la librería exportada junto a `cnc_camera_node.ino`, completar `WIFI_SSID`, `WIFI_PASSWORD` y `BACKEND_URL`, compilar y cargar.

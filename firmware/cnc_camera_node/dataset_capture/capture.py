@@ -145,7 +145,7 @@ def main() -> None:
         errors  = 0
 
         for i in range(1, args.count + 1):
-            ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts       = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:20]  # include microseconds
             filename = dest / f"{args.pcb_class}_{ts}_{i:04d}.jpg"
 
             try:

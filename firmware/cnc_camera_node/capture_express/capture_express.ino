@@ -28,8 +28,9 @@
 #include <WebServer.h>
 
 // ── Credenciales WiFi ─────────────────────────────────────────────────────────
-#define WIFI_SSID  "TU_SSID"
-#define WIFI_PASS  "TU_PASSWORD"
+// Copiar camera_secrets.h.template → camera_secrets.h y rellenar WIFI_SSID y WIFI_PASS.
+// camera_secrets.h está en .gitignore y NUNCA debe commitearse con credenciales reales.
+#include "camera_secrets.h"
 
 // ── Pines ESP32-CAM AI Thinker (OV2640) ──────────────────────────────────────
 #define PWDN_GPIO_NUM     32

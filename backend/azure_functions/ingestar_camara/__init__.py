@@ -50,6 +50,7 @@ from typing import Any, Dict, Optional
 
 import azure.functions as func
 from azure.cosmos import CosmosClient
+from azure.cosmos.exceptions import CosmosHttpResponseError
 
 logger = logging.getLogger("ingestar_camara")
 
@@ -97,8 +98,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json",
             headers=CORS_HEADERS,
         )
-    except Exception as exc:  # pragma: no cover
-        logger.exception("Error al persistir documento de cámara: %s", exc)
+    except CosmosHttpResponseError as exc:  # pragma: no cover
+        logger.exception("Error de Cosmos DB al persistir documento: %s", exc)
+        return _error(503, "Error al persistir en la base de datos")
+    except Exception as exc:  # pragma: no cover  # pylint: disable=broad-except
+        logger.exception("Error inesperado al procesar telemetría de cámara: %s", exc)
         return _error(500, "Error interno del servidor")
 
 

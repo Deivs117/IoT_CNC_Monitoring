@@ -20,6 +20,8 @@ _COSMOS_CONN      = os.environ.get("COSMOSDB_CONNECTION", "")
 _COSMOS_DB        = "CNCMonitor"
 _COSMOS_CONTAINER = "Telemetry"
 
+# Must stay in sync with the Edge Impulse project label list exported to the Arduino library.
+# Update here whenever labels are added/removed from the model.
 VALID_PCB_CLASSES = frozenset({"PCB_Mixta", "PCB_SMD", "PCB_TH", "Sin_PCB"})
 
 # Instanciar el cliente una sola vez a nivel de módulo para reutilizarlo entre
@@ -125,7 +127,7 @@ def _build_camera_document(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     pcb_class = str(camera.get("pcb_class") or "Sin_PCB")
     if pcb_class not in VALID_PCB_CLASSES:
-        logger.warning("pcb_class desconocido '%s' — forzando 'Sin_PCB'", pcb_class)
+        logger.warning("unknown pcb_class '%s' — defaulting to 'Sin_PCB'", pcb_class)
         pcb_class = "Sin_PCB"
 
     return {

@@ -38,6 +38,13 @@ from pathlib import Path
 import numpy as np
 import requests
 
+# cv2 is optional — only required when --no-preview is NOT set.
+# Import it once at module level so it is not repeated in every function.
+try:
+    import cv2 as _cv2  # type: ignore[import]
+except ImportError:
+    _cv2 = None  # type: ignore[assignment]
+
 # ── Constantes ────────────────────────────────────────────────────────────────
 VALID_CLASSES     = ("PCB_Mixta", "PCB_SMD", "PCB_TH", "Sin_PCB")
 DATASET_ROOT      = Path(__file__).parent / "dataset"
@@ -129,8 +136,7 @@ def fetch_jpeg(url: str, session: requests.Session) -> bytes:
 def jpeg_to_bgr(data: bytes):
     """Convierte bytes JPEG a imagen BGR para OpenCV."""
     arr = np.frombuffer(data, dtype=np.uint8)
-    import cv2  # noqa: PLC0415 — importación diferida para --no-preview
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    img = _cv2.imdecode(arr, _cv2.IMREAD_COLOR)  # type: ignore[union-attr]
     return img
 
 
@@ -144,11 +150,9 @@ def run_preview_loop(
 
     Retorna True si el usuario confirma con ENTER o 's', False si cancela.
     """
-    import cv2  # noqa: PLC0415
-
     window = f"Preview — {pcb_class} | ENTER/s = iniciar  ESC/q = cancelar"
-    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 640, 480)
+    _cv2.namedWindow(window, _cv2.WINDOW_NORMAL)  # type: ignore[union-attr]
+    _cv2.resizeWindow(window, 640, 480)  # type: ignore[union-attr]
 
     print(
         "\n  ── Previsualización activa ────────────────────────────────────\n"
@@ -169,26 +173,26 @@ def run_preview_loop(
             print(f"\r  ⚠ Error de frame en preview: {exc}   ", end="", flush=True)
             time.sleep(0.5)
             # No abandonar el loop; esperar a que la cámara responda
-            if cv2.waitKey(1) & 0xFF in (_KEY_ESC, _KEY_Q):
+            if _cv2.waitKey(1) & 0xFF in (_KEY_ESC, _KEY_Q):  # type: ignore[union-attr]
                 break
             continue
 
         if frame is not None:
             label = f"Clase: {pcb_class}  |  ENTER/s=OK  ESC/q=Cancelar"
-            cv2.putText(
+            _cv2.putText(  # type: ignore[union-attr]
                 frame, label, (10, 28),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA,
+                _cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, _cv2.LINE_AA,
             )
-            cv2.imshow(window, frame)
+            _cv2.imshow(window, frame)  # type: ignore[union-attr]
 
-        key = cv2.waitKey(1) & 0xFF
+        key = _cv2.waitKey(1) & 0xFF  # type: ignore[union-attr]
         if key in (_KEY_ENTER, _KEY_S):
             confirmed = True
             break
         if key in (_KEY_ESC, _KEY_Q):
             break
 
-    cv2.destroyAllWindows()
+    _cv2.destroyAllWindows()  # type: ignore[union-attr]
     return confirmed
 
 
@@ -233,7 +237,7 @@ def main() -> None:  # noqa: C901
             sys.exit(1)
 
         # ── Previsualización (si está activa) ─────────────────────────────────
-        if not args.no_preview:
+        if not args.no_preview and _cv2 is not None:
             try:
                 confirmed = run_preview_loop(capture_url, session, args.pcb_class)
             except KeyboardInterrupt:
@@ -246,6 +250,8 @@ def main() -> None:  # noqa: C901
 
             print("\n  ✓ Previsualización confirmada. Iniciando captura...\n")
         else:
+            if not args.no_preview and _cv2 is None:
+                print("  ⚠ opencv-python no instalado — continuando sin preview.\n")
             # Sin preview: confirmar por terminal
             print(
                 f"  ¿Iniciar la captura de {args.count} imágenes para la clase "
@@ -264,16 +270,11 @@ def main() -> None:  # noqa: C901
         success = 0
         errors  = 0
 
-        # Importar cv2 aquí solo si hay preview activo durante la ráfaga
-        show_live = not args.no_preview
+        show_live = not args.no_preview and _cv2 is not None
         if show_live:
-            try:
-                import cv2  # noqa: PLC0415
-                window_burst = f"Capturando {args.pcb_class}…"
-                cv2.namedWindow(window_burst, cv2.WINDOW_NORMAL)
-                cv2.resizeWindow(window_burst, 480, 360)
-            except ImportError:
-                show_live = False
+            window_burst = f"Capturando {args.pcb_class}…"
+            _cv2.namedWindow(window_burst, _cv2.WINDOW_NORMAL)  # type: ignore[union-attr]
+            _cv2.resizeWindow(window_burst, 480, 360)  # type: ignore[union-attr]
 
         for i in range(1, args.count + 1):
             ts       = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:20]
@@ -288,12 +289,12 @@ def main() -> None:  # noqa: C901
                     frame = jpeg_to_bgr(data)
                     if frame is not None:
                         label = f"{i}/{args.count} — {args.pcb_class}"
-                        cv2.putText(
+                        _cv2.putText(  # type: ignore[union-attr]
                             frame, label, (10, 28),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2, cv2.LINE_AA,
+                            _cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2, _cv2.LINE_AA,
                         )
-                        cv2.imshow(window_burst, frame)
-                        cv2.waitKey(1)
+                        _cv2.imshow(window_burst, frame)  # type: ignore[union-attr]
+                        _cv2.waitKey(1)  # type: ignore[union-attr]
 
                 bar = format_progress_bar(success, args.count)
                 print(f"\r  {bar}  {filename.name}", end="", flush=True)
@@ -305,8 +306,7 @@ def main() -> None:  # noqa: C901
                 time.sleep(args.delay)
 
         if show_live:
-            import cv2  # noqa: PLC0415
-            cv2.destroyAllWindows()
+            _cv2.destroyAllWindows()  # type: ignore[union-attr]
 
     print(f"\n\n{'─'*54}")
     print(f"  Completado: {success} imágenes guardadas, {errors} errores.")

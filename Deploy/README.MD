@@ -12,6 +12,47 @@ La guía está pensada para que el despliegue sea:
 
 ---
 
+## Flujo de despliegue completo
+
+```mermaid
+flowchart TD
+    A([Azure Cloud Shell]) -->|git clone| B[Repositorio local]
+    B -->|01_infraestructura.sh| C["Azure Resource Group\n+ IoT Hub\n+ Cosmos DB\n+ Storage\n+ 2 dispositivos IoT"]
+    C -->|02_backend.sh| D["Azure Function App\n5 functions desplegadas"]
+    D -->|03_frontend_hosting.sh| E["Static Website\nfrontend/index.html + app.js"]
+
+    C --> F["infra_outputs.env\n(FUNC_BASE_URL, COSMOSDB_*, IOTHUB_*)"]
+    F --> D
+    F --> E
+
+    style C fill:#0078D4,color:#fff
+    style D fill:#0078D4,color:#fff
+    style E fill:#0078D4,color:#fff
+```
+
+## Infraestructura desplegada
+
+```mermaid
+graph LR
+    subgraph Azure["Azure Resource Group rg-cnc-iot"]
+        HUB["IoT Hub\ncnc-iot-hub\ndevices: cnc_fresadora_01\n         cnc_camera_01"]
+        COSMOS["Cosmos DB Serverless\ncnc-iot-cosmos\nCNCMonitor/Telemetry"]
+        FUNC["Function App\ncnc-iot-func\n• telemetry_processor\n• get_datos\n• descargar_csv\n• control_actuador\n• ingestar_camara"]
+        STORAGE["Storage (Functions)\ncnciotfunc<hash>"]
+        STATICWEB["Storage (Frontend)\ncnciotfront<hash>\nStatic Website"]
+    end
+
+    ESP1["ESP32 principal\ncnc_fresadora_01"] -->|MQTTS 8883| HUB
+    ESP2["ESP32-CAM\ncnc_camera_01"] -->|MQTTS 8883| HUB
+    HUB --> FUNC
+    FUNC --> COSMOS
+    COSMOS --> FUNC
+    FUNC --> STATICWEB
+    STORAGE -.->|AzureWebJobsStorage| FUNC
+```
+
+---
+
 # 1. Objetivo de esta carpeta
 
 La carpeta `Deploy/` contiene scripts Bash para automatizar el despliegue cloud del sistema.
@@ -37,7 +78,7 @@ Los scripts permiten desplegar:
 
 - **Azure Resource Group**
 - **Azure IoT Hub**
-- **Registro del dispositivo ESP32**
+- **Registro de dos dispositivos ESP32** (`cnc_fresadora_01` y `cnc_camera_01`)
 - **Azure Cosmos DB (Serverless)**
 - **Azure Function App**
 - **Storage Account para Azure Functions**

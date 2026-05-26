@@ -1,0 +1,89 @@
+#pragma once
+
+// =============================================================================
+// config.h.template — Plantilla de configuración del nodo CNC principal
+// =============================================================================
+//
+// INSTRUCCIONES:
+//   1. Copia este archivo como config.h.
+//   2. Rellena los valores con las credenciales reales de tu entorno.
+//   3. Nunca commitees config.h con secretos reales.
+//   4. Verifica que config.h esté incluido en el .gitignore.
+//
+// Este archivo contiene solo placeholders y valores de ejemplo.
+// =============================================================================
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WiFi
+// ─────────────────────────────────────────────────────────────────────────────
+// Reemplaza con las credenciales reales de tu red WiFi.
+constexpr char WIFI_SSID[]     = "TU_SSID";
+constexpr char WIFI_PASSWORD[] = "TU_PASSWORD";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Azure IoT Hub — conexión MQTTS directa
+// ─────────────────────────────────────────────────────────────────────────────
+// FQDN del IoT Hub, por ejemplo:
+//   cnc-iot-hub-deiv-deployment.azure-devices.net
+constexpr char IOT_HUB_HOST[] = "TU_IOT_HUB_HOST";
+
+// Device ID del dispositivo registrado en IoT Hub.
+// Debe coincidir con el dispositivo creado en Azure.
+constexpr char DEVICE_ID[] = "TU_DEVICE_ID";
+
+// Clave primaria del dispositivo en formato base64.
+// Obtener con:
+//   az iot hub device-identity show \
+//     --hub-name <hub-name> \
+//     --device-id <device-id> \
+//     --query "authentication.symmetricKey.primaryKey" --output tsv
+constexpr char DEVICE_PRIMARY_KEY[] = "TU_DEVICE_PRIMARY_KEY_BASE64";
+
+// Puerto MQTTS estándar de Azure IoT Hub
+constexpr uint16_t MQTT_PORT = 8883;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Certificado raíz de Azure IoT Hub
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORTANTE:
+//   - Este certificado normalmente NO debes modificarlo.
+//   - Solo actualízalo si Microsoft cambia la cadena de confianza oficial.
+//   - Sirve para validar la conexión TLS con Azure IoT Hub.
+//
+// Fuente oficial:
+//   https://learn.microsoft.com/en-us/azure/iot-hub/reference-iot-hub-tls-support
+static const char* AZURE_ROOT_CA = R"EOF(
+-----BEGIN CERTIFICATE-----
+PEGAR_AQUI_EL_CERTIFICADO_RAIZ_OFICIAL_DE_AZURE
+-----END CERTIFICATE-----
+)EOF";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pines del ESP32-C3 / ESP32 principal
+// ─────────────────────────────────────────────────────────────────────────────
+// Ajusta estos valores según tu hardware real.
+constexpr int DHT_PIN        = 0;
+constexpr int DHT_TYPE       = 22;   // 22 = DHT22, 11 = DHT11
+constexpr int MPU_ADDR       = 0x68;
+constexpr int SDA_PIN        = 8;
+constexpr int SCL_PIN        = 9;
+constexpr int STATUS_LED_PIN = 10;
+constexpr int ACTUATOR_PIN   = 10;   // Revisa si coincide con tu relé o LED
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intervalos y umbrales
+// ─────────────────────────────────────────────────────────────────────────────
+// Intervalo de lectura del DHT en milisegundos.
+constexpr unsigned long DHT_INTERVAL_MS = 2000;
+
+// Umbral para disparar alerta de anomalía vibracional.
+constexpr float ANOMALY_THRESHOLD = 0.70f;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAS token / renovación
+// ─────────────────────────────────────────────────────────────────────────────
+// Tiempo de validez del SAS token en segundos.
+constexpr unsigned long SAS_TTL = 3600UL;
+
+// Tiempo antes de expiración para renovarlo.
+constexpr unsigned long SAS_RENEW_BEFORE = 300UL;

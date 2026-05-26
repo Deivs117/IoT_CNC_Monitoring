@@ -10,15 +10,6 @@
       "cardinality": "many",
       "consumerGroup": "$Default",
       "dataType": "binary"
-    },
-    {
-      "type": "cosmosDB",
-      "name": "documents",
-      "direction": "out",
-      "databaseName": "CNCMonitor",
-      "collectionName": "Telemetry",
-      "connectionStringSetting": "COSMOSDB_CONNECTION",
-      "createIfNotExists": false
     }
   ]
 }

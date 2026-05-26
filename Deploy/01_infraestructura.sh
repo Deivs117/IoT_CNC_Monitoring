@@ -29,7 +29,7 @@ warn() { echo "[01_infra] ⚠ $*"; }
 # ---------------------------------------------------------------------------
 RG_NAME="${RG_NAME:-rg-cnc-iot}"
 LOCATION="${LOCATION:-centralus}"
-IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub}"
+IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub-deiv-deployment}"
 IOT_DEVICE_ID="${IOT_DEVICE_ID:-cnc_fresadora_01}"
 COSMOS_ACCOUNT="${COSMOS_ACCOUNT:-cnc-iot-cosmos}"
 COSMOS_DB="CNCMonitor"

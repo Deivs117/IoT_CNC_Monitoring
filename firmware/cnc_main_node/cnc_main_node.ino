@@ -460,7 +460,8 @@ void setup() {
     // GPIO
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
-    // ACTUATOR_PIN puede coincidir con STATUS_LED_PIN en ESP32-C3; ajustar si difieren
+    // ACTUATOR_PIN may coincide with STATUS_LED_PIN on ESP32-C3; assign a
+    // dedicated GPIO in config.h if the actuator and status LED are separate.
     if (ACTUATOR_PIN != STATUS_LED_PIN) {
         pinMode(ACTUATOR_PIN, OUTPUT);
         digitalWrite(ACTUATOR_PIN, LOW);

@@ -54,7 +54,7 @@ FUNC_APP_NAME="${FUNC_APP_NAME:-cnc-iot-func}"
 # que coincida en futuras ejecuciones y no se creen recursos duplicados.
 # ──────────────────────────────────────────────────────────────────────────────
 if [[ -z "${INSTANCE_SUFFIX:-}" ]]; then
-  INSTANCE_SUFFIX=$(echo -n "${RG_NAME}" | sha256sum | head -c 6)
+  INSTANCE_SUFFIX=$(echo -n "${RG_NAME}" | sha256sum | head -c 8)
 fi
 FUNC_STORAGE="${FUNC_STORAGE:-cnciotfunc${INSTANCE_SUFFIX}}"
 FRONTEND_SA="${FRONTEND_SA:-cnciotfront${INSTANCE_SUFFIX}}"

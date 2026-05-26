@@ -3,16 +3,23 @@
 // =============================================================================
 // config.h — Configuración del nodo CNC principal (ESP32-C3)
 //
-// INSTRUCCIONES:
-//   1. Reemplaza WIFI_SSID / WIFI_PASSWORD con tus credenciales de red.
-//   2. Tras ejecutar Deploy/01_infraestructura.sh, obtén las credenciales del
-//      dispositivo con:
-//        az iot hub device-identity show --hub-name cnc-iot-hub \
-//          --device-id cnc_fresadora_01 --query "authentication.symmetricKey"
-//   3. Copia la clave primaria en DEVICE_PRIMARY_KEY (base64, sin espacios).
-//   4. Actualiza IOT_HUB_HOST con el FQDN de tu IoT Hub.
+// ⚠️  SEGURIDAD — LEE ESTO ANTES DE MODIFICAR ESTE ARCHIVO
+// ──────────────────────────────────────────────────────────────────────────────
+// Este archivo contiene valores PLACEHOLDER que NO son credenciales reales.
+// Antes de usar el firmware:
+//   1. Copia este archivo: cp config.h config.local.h   (o edítalo directamente)
+//   2. Reemplaza TODOS los valores marcados con YOUR_* o <PLACEHOLDER> con los
+//      valores reales de tu entorno.
+//   3. NUNCA comitas credenciales reales (WIFI_PASSWORD, DEVICE_PRIMARY_KEY) al
+//      repositorio. El archivo config.h con valores reales debe estar en .gitignore.
 //
-// NINGÚN secreto real debe commitearse en el repositorio.
+// INSTRUCCIONES DE CONFIGURACIÓN:
+//   - WIFI_SSID / WIFI_PASSWORD: credenciales de tu red Wi-Fi local.
+//   - IOT_HUB_HOST: FQDN del IoT Hub (ej. cnc-iot-hub.azure-devices.net).
+//   - DEVICE_PRIMARY_KEY: clave primaria del dispositivo en base64. Obtener con:
+//       az iot hub device-identity show --hub-name cnc-iot-hub \
+//         --device-id cnc_fresadora_01 \
+//         --query "authentication.symmetricKey.primaryKey" --output tsv
 // =============================================================================
 
 // ── Wi-Fi ────────────────────────────────────────────────────────────────────

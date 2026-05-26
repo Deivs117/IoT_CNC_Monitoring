@@ -76,14 +76,13 @@
           <div class="metric-card__badge" id="badge-alert"></div>
         </div>
 
-        <!-- Cámara / Visual Anomaly Score — PLACEHOLDER (Próximamente) -->
-        <div class="metric-card metric-card--disabled" id="card-anom-visual" title="Requiere ESP32-CAM">
+        <!-- Clasificación Visual PCB — ESP32-CAM (cnc_camera_01) -->
+        <div class="metric-card" id="card-pcb-class">
           <div class="metric-card__icon">📷</div>
-          <div class="metric-card__label">Anomalía Visual</div>
-          <div class="metric-card__value" id="val-anom-visual">—</div>
-          <div class="metric-card__unit">score</div>
-          <div class="metric-card__badge metric-card__badge--coming-soon">Próximamente</div>
-          <div class="metric-card__coming-soon-overlay">Cámara / Visual Anomaly Score<br>(Próximamente)</div>
+          <div class="metric-card__label">Clasificación PCB</div>
+          <div class="metric-card__value metric-card__value--text" id="val-pcb-class">—</div>
+          <div class="metric-card__unit" id="unit-pcb-class"></div>
+          <div class="metric-card__badge" id="badge-pcb-class"></div>
         </div>
 
       </div><!-- /.metrics-grid -->
@@ -92,6 +91,13 @@
       <div id="alert-reasons-panel" class="alert-reasons hidden">
         <span class="alert-reasons__icon">⚠️</span>
         <span id="alert-reasons-text"></span>
+      </div>
+
+      <!-- Panel de clasificación PCB — datos de cnc_camera_01 -->
+      <div id="pcb-panel" class="pcb-panel hidden">
+        <h3 class="pcb-panel__title">🎯 Probabilidades del modelo PCB — ESP32-CAM</h3>
+        <div class="pcb-bars" id="pcb-bars"></div>
+        <div class="pcb-meta" id="pcb-meta"></div>
       </div>
     </section>
 
@@ -131,7 +137,7 @@
               <th>Hum (%)</th>
               <th>Vibración</th>
               <th>Score Vib.</th>
-              <th>Score Visual</th>
+              <th>Clase PCB</th>
               <th>Alerta</th>
             </tr>
           </thead>

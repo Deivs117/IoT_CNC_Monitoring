@@ -19,6 +19,25 @@ const THRESHOLDS = {
   vibAnom:    0.80,
 };
 
+// ── Configuración del nodo de cámara ─────────────────────────────────────────
+const CAMERA_DEVICE_ID = "cnc_camera_01";
+
+const PCB_CLASSES = ["PCB_Mixta", "PCB_SMD", "PCB_TH", "Sin_PCB"];
+
+const PCB_CLASS_COLORS = {
+  PCB_Mixta: "#f59e0b",
+  PCB_SMD:   "#3b82f6",
+  PCB_TH:    "#10b981",
+  Sin_PCB:   "#6b7280",
+};
+
+const PCB_CLASS_ICONS = {
+  PCB_Mixta: "🔀",
+  PCB_SMD:   "🔲",
+  PCB_TH:    "🔌",
+  Sin_PCB:   "⬜",
+};
+
 let refreshTimer = null;
 
 // ---------------------------------------------------------------------------
@@ -26,7 +45,9 @@ let refreshTimer = null;
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   fetchData();
+  fetchCameraData();
   refreshTimer = setInterval(fetchData, REFRESH_INTERVAL_MS);
+  setInterval(fetchCameraData, REFRESH_INTERVAL_MS);
 });
 
 // ---------------------------------------------------------------------------
@@ -72,7 +93,7 @@ async function fetchData() {
 }
 
 // ---------------------------------------------------------------------------
-// Renderizado de métricas (tarjetas superiores)
+// Renderizado de métricas (tarjetas superiores — nodo principal)
 // ---------------------------------------------------------------------------
 function renderMetrics(data) {
   if (!data || data.length === 0) {
@@ -118,10 +139,6 @@ function renderMetrics(data) {
   setCardState("card-anom-vib", vibScoreAlert ? "alert" : "ok");
   setBadge("badge-anom-vib", vibScoreAlert ? "⚠ Alto" : "✓ Normal", vibScoreAlert ? "alert" : "ok");
 
-  // Visual anomaly score — placeholder (siempre null por ahora)
-  const visualScore = predictions.visual_anomaly_score;
-  setText("val-anom-visual", visualScore !== null && visualScore !== undefined ? parseFloat(visualScore).toFixed(3) : "—");
-
   // Estado de alerta general
   const alertActive = alerts.active === true;
   setText("val-alert", alertActive ? "ALERTA" : "Normal");
@@ -148,18 +165,21 @@ function renderTable(data) {
   }
 
   tbody.innerHTML = data.map((item) => {
-    const s = item.sensors    || {};
+    const s = item.sensors     || {};
     const p = item.predictions || {};
-    const a = item.alerts     || {};
+    const a = item.alerts      || {};
+    const cam = item.camera    || {};
     const ts = item.timestamp ? new Date(item.timestamp * 1000).toLocaleString() : "—";
     const alertRow = a.active ? "row--alert" : "";
 
-    const vibScore   = p.vibration_anomaly_score !== null && p.vibration_anomaly_score !== undefined
+    const vibScore = p.vibration_anomaly_score !== null && p.vibration_anomaly_score !== undefined
       ? parseFloat(p.vibration_anomaly_score).toFixed(3)
       : "—";
-    const visualScore = p.visual_anomaly_score !== null && p.visual_anomaly_score !== undefined
-      ? parseFloat(p.visual_anomaly_score).toFixed(3)
-      : '<span class="coming-soon-cell">Próx.</span>';
+
+    // Columna "Clase PCB": muestra la clase si es documento de cámara; vacío si es del nodo principal
+    const pcbClass = item.device_type === "camera"
+      ? `${PCB_CLASS_ICONS[cam.pcb_class] || "📷"} ${cam.pcb_class || "—"}`
+      : '<span class="cell--dimmed">—</span>';
 
     return `<tr class="${alertRow}">
       <td>${escapeHtml(ts)}</td>
@@ -172,7 +192,7 @@ function renderTable(data) {
       <td class="${parseFloat(vibScore) >= THRESHOLDS.vibAnom ? "cell--alert" : ""}">
         ${escapeHtml(vibScore)}
       </td>
-      <td class="cell--dimmed">${visualScore}</td>
+      <td>${pcbClass}</td>
       <td>${a.active ? '<span class="badge badge--alert">Alerta</span>' : '<span class="badge badge--ok">Normal</span>'}</td>
     </tr>`;
   }).join("");
@@ -234,6 +254,86 @@ async function sendCommand(comando) {
 
   // Ocultar mensaje después de 5 segundos
   setTimeout(() => responseEl.classList.add("hidden"), 5000);
+}
+
+// ---------------------------------------------------------------------------
+// Carga de datos del nodo de cámara (cnc_camera_01)
+// ---------------------------------------------------------------------------
+async function fetchCameraData() {
+  try {
+    const res = await fetch(
+      buildUrl("datos", { limit: 1, device_id: CAMERA_DEVICE_ID })
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.length > 0 && data[0].device_type === "camera") {
+      renderCameraCard(data[0]);
+    }
+  } catch (err) {
+    console.warn("[CAM] Error al obtener datos de cámara:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Renderizado del card de clasificación PCB y panel de probabilidades
+// ---------------------------------------------------------------------------
+function renderCameraCard(item) {
+  const cam   = item.camera || {};
+  const cls   = cam.pcb_class || null;
+  const conf  = cam.confidence != null ? (cam.confidence * 100).toFixed(1) + "%" : null;
+  const probs = cam.probabilities || {};
+
+  // ── Tarjeta de clasificación ──────────────────────────────────────────────
+  if (cls) {
+    const icon = PCB_CLASS_ICONS[cls] || "📷";
+    setText("val-pcb-class", `${icon} ${cls}`);
+    setText("unit-pcb-class", conf ? `${conf} confianza` : "");
+    setCardState("card-pcb-class", cls === "Sin_PCB" ? "" : "ok");
+    setBadge("badge-pcb-class", conf ? `✓ ${conf}` : "✓", "ok");
+  } else {
+    setText("val-pcb-class", "—");
+    setText("unit-pcb-class", "");
+    setCardState("card-pcb-class", "");
+    setBadge("badge-pcb-class", "", "");
+  }
+
+  // ── Panel de barras de probabilidad ──────────────────────────────────────
+  const panel = document.getElementById("pcb-panel");
+  const bars  = document.getElementById("pcb-bars");
+  const meta  = document.getElementById("pcb-meta");
+
+  if (!cls) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+
+  bars.innerHTML = PCB_CLASSES.map((c) => {
+    const val   = probs[c] != null ? probs[c] : 0;
+    const pct   = (val * 100).toFixed(1);
+    const width = Math.round(val * 100);
+    const color = PCB_CLASS_COLORS[c] || "#6b7280";
+    const active = c === cls ? "pcb-bar--active" : "";
+    return `
+      <div class="pcb-bar-row ${active}">
+        <span class="pcb-bar-label">${PCB_CLASS_ICONS[c] || ""} ${escapeHtml(c)}</span>
+        <div class="pcb-bar-track">
+          <div class="pcb-bar-fill" style="width:${width}%;background:${color}"></div>
+        </div>
+        <span class="pcb-bar-value">${pct}%</span>
+      </div>`;
+  }).join("");
+
+  const ts = item.timestamp
+    ? new Date(item.timestamp * 1000).toLocaleTimeString()
+    : "—";
+  const infMs = cam.inference_ms != null ? `${cam.inference_ms}ms` : "—";
+  meta.textContent =
+    `Dispositivo: ${escapeHtml(item.device_id || CAMERA_DEVICE_ID)}`
+    + ` | Inferencia: ${infMs}`
+    + ` | Modelo: ${escapeHtml(cam.model_version || "—")}`
+    + ` | Actualizado: ${ts}`;
 }
 
 // ---------------------------------------------------------------------------

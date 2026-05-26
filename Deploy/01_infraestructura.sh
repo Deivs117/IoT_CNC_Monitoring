@@ -29,17 +29,35 @@ warn() { echo "[01_infra] ⚠ $*"; }
 # ---------------------------------------------------------------------------
 RG_NAME="${RG_NAME:-rg-cnc-iot}"
 LOCATION="${LOCATION:-centralus}"
-IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub-deivid-deployment}"
+IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub}"
 IOT_DEVICE_ID="${IOT_DEVICE_ID:-cnc_fresadora_01}"
 COSMOS_ACCOUNT="${COSMOS_ACCOUNT:-cnc-iot-cosmos}"
 COSMOS_DB="CNCMonitor"
 COSMOS_CONTAINER="Telemetry"
 FUNC_APP_NAME="${FUNC_APP_NAME:-cnc-iot-func}"
 
-# Sufijos únicos basados en hash del nombre del hub (deterministas entre runs)
-HASH_SUFFIX=$(echo -n "${IOT_HUB_NAME}" | md5sum | head -c 8)
-FUNC_STORAGE="${FUNC_STORAGE:-cnciotfunc${HASH_SUFFIX}}"
-FRONTEND_SA="${FRONTEND_SA:-cnciotfront${HASH_SUFFIX}}"
+# Convención de nomenclatura para Storage Accounts
+# ──────────────────────────────────────────────────────────────────────────────
+# Los Storage Accounts en Azure deben ser globalmente únicos y solo pueden
+# contener minúsculas y dígitos (3-24 caracteres).
+#
+# Para garantizar unicidad sin usar nombres opacos, se utiliza INSTANCE_SUFFIX:
+#   - Si defines INSTANCE_SUFFIX antes de ejecutar el script, se usará tal cual.
+#   - Si no lo defines, se genera un sufijo de 6 caracteres (hash SHA256 truncado
+#     del Resource Group, que es estable entre ejecuciones del mismo entorno).
+#
+# Ejemplos de nombres resultantes con INSTANCE_SUFFIX="deivid":
+#   FUNC_STORAGE  → cnciotfuncdeivid
+#   FRONTEND_SA   → cnciotfrontdeivid
+#
+# Documentar el INSTANCE_SUFFIX usado en ~/iot_cnc_secrets.env para
+# que coincida en futuras ejecuciones y no se creen recursos duplicados.
+# ──────────────────────────────────────────────────────────────────────────────
+if [[ -z "${INSTANCE_SUFFIX:-}" ]]; then
+  INSTANCE_SUFFIX=$(echo -n "${RG_NAME}" | sha256sum | head -c 6)
+fi
+FUNC_STORAGE="${FUNC_STORAGE:-cnciotfunc${INSTANCE_SUFFIX}}"
+FRONTEND_SA="${FRONTEND_SA:-cnciotfront${INSTANCE_SUFFIX}}"
 
 log "Iniciando aprovisionamiento de infraestructura..."
 log "  RG:          ${RG_NAME}"

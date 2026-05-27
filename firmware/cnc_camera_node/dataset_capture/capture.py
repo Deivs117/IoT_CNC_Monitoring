@@ -91,8 +91,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--delay",
         type=float,
-        default=1.2,
-        help="Segundos entre capturas (default: 1.2). Ajusta según necesites variar el ángulo.",
+        default=0.75,
+        help="Segundos entre capturas (default: 0.75). Ajusta según necesites variar el ángulo.",
     )
     parser.add_argument(
         "--port",
@@ -178,12 +178,21 @@ def run_preview_loop(
             continue
 
         if frame is not None:
-            label = f"Clase: {pcb_class}  |  ENTER/s=OK  ESC/q=Cancelar"
-            _cv2.putText(  # type: ignore[union-attr]
-                frame, label, (10, 28),
-                _cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, _cv2.LINE_AA,
+            # 1. Obtener las dimensiones actuales de la imagen
+            h, w = frame.shape[:2]
+            
+            # 2. Ajustar dinámicamente según resolución
+            # Si la imagen es muy pequeña (QQVGA 160x120), usamos fuente más pequeña
+            font_scale = 0.4 if w <= 160 else 0.7
+            thickness = 1 if w <= 160 else 2
+            
+            label = f"Clase: {pcb_class} | OK=ENTER | CANCEL=ESC"
+            
+            _cv2.putText(
+                frame, label, (10, int(h * 0.15)), # Posición relativa al alto (15% desde arriba)
+                _cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), thickness, _cv2.LINE_AA,
             )
-            _cv2.imshow(window, frame)  # type: ignore[union-attr]
+            _cv2.imshow(window, frame)
 
         key = _cv2.waitKey(1) & 0xFF  # type: ignore[union-attr]
         if key in (_KEY_ENTER, _KEY_S):

@@ -49,6 +49,7 @@
 #define VSYNC_GPIO_NUM    25
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
+#define FLASH_LED_PIN 4
 
 WebServer server(80);
 
@@ -204,6 +205,15 @@ void setup() {
   server.on("/capture", HTTP_GET, handleCapture);
   server.begin();
   Serial.println("[HTTP] Servidor iniciado en puerto 80.");
+
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  digitalWrite(FLASH_LED_PIN, LOW); // Asegúrate de que inicie apagado
+
+  server.on("/led", HTTP_GET, []() {
+    String state = server.arg("state"); // Uso: /led?state=1 para encender
+    digitalWrite(FLASH_LED_PIN, state == "1" ? HIGH : LOW);
+    server.send(200, "text/plain", "LED " + String(state == "1" ? "ON" : "OFF"));
+  });
 }
 
 // =============================================================================

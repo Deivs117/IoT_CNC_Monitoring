@@ -41,7 +41,7 @@
 //   - esp32 board package (Espressif, >= 2.0.0)
 //   - ArduinoJson (Benoit Blanchon, >= 6.21)
 //   - PubSubClient (Nick O'Leary, >= 2.8)
-//   - CNC_PCB_Classifier_inferencing (exportar desde Edge Impulse como librería Arduino,
+//   - CNC_Image_Clasification_inferencing (exportar desde Edge Impulse como librería Arduino,
 //     instalar con: Sketch > Include Library > Add .ZIP Library)
 //
 // Board settings:
@@ -64,9 +64,11 @@
 // Después de entrenar el modelo en Edge Impulse Studio:
 //   Deployment → Arduino Library → Build → descargar el .zip
 //   Arduino IDE: Sketch → Include Library → Add .ZIP Library
-// El nombre del archivo .h varía según el nombre del proyecto en Edge Impulse.
-// Ajustar el include a continuación con el nombre real del archivo generado:
-#include <CNC_PCB_Classifier_inferencing.h>
+// Librería exportada: ei-cnc_image_clasification-arduino-1.0.1-impulse-#1.zip
+// Nombre del paquete confirmado en library.properties:
+//   name=CNC_Image_Clasification_inferencing
+//   includes=CNC_Image_Clasification_inferencing.h
+#include <CNC_Image_Clasification_inferencing.h>
 
 // ── Credenciales WiFi y Azure IoT Hub ─────────────────────────────────────────
 // Copiar camera_secrets.h.template → camera_secrets.h y rellenar los valores.

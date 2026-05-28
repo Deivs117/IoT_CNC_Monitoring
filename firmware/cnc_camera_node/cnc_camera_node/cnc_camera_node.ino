@@ -41,8 +41,7 @@
 //   - esp32 board package (Espressif, >= 2.0.0)
 //   - ArduinoJson (Benoit Blanchon, >= 6.21)
 //   - PubSubClient (Nick O'Leary, >= 2.8)
-//   - CNC_Image_Clasification_inferencing (exportar desde Edge Impulse como librería Arduino,
-//     instalar con: Sketch > Include Library > Add .ZIP Library)
+//   - CNC_Image_Clasification_inferencing (exportar desde Edge Impulse como librería Arduino)
 //
 // Board settings:
 //   - Board: AI Thinker ESP32-CAM
@@ -59,38 +58,24 @@
 #include <time.h>
 #include "mbedtls/md.h"
 #include "mbedtls/base64.h"
-
-// ── Librería exportada de Edge Impulse ────────────────────────────────────────
-// Después de entrenar el modelo en Edge Impulse Studio:
-//   Deployment → Arduino Library → Build → descargar el .zip
-//   Arduino IDE: Sketch → Include Library → Add .ZIP Library
-// Librería exportada: ei-cnc_image_clasification-arduino-1.0.1-impulse-#1.zip
-// Nombre del paquete confirmado en library.properties:
-//   name=CNC_Image_Clasification_inferencing
-//   includes=CNC_Image_Clasification_inferencing.h
 #include <CNC_Image_Clasification_inferencing.h>
-
-// ── Credenciales WiFi y Azure IoT Hub ─────────────────────────────────────────
-// Copiar camera_secrets.h.template → camera_secrets.h y rellenar los valores.
-// camera_secrets.h está en .gitignore y NUNCA debe commitearse con credenciales reales.
-#include "camera_secrets.h"  // ← crear desde camera_secrets.h.template
+#include "camera_secrets.h"
 
 // ── Identificación del dispositivo ───────────────────────────────────────────
 #define CAMERA_DEVICE_ID  "cnc_camera_01"
 #define MODEL_VERSION     "1.0.0"
 
-// ── Control de publicación ────────────────────────────────────────────────────
-// Publicar cada 10 segundos o inmediatamente si la clase cambia.
+// ── Control de publicación ───────────────────────────────────────────────────
 #define PUBLISH_INTERVAL_MS  10000UL
 
 // ── NTP ───────────────────────────────────────────────────────────────────────
 #define NTP_SERVER       "pool.ntp.org"
 
 // ── SAS token ─────────────────────────────────────────────────────────────────
-#define SAS_TTL          3600UL   // validez del token en segundos
-#define SAS_RENEW_BEFORE  300UL   // renovar el token 5 minutos antes de que expire
+#define SAS_TTL          3600UL
+#define SAS_RENEW_BEFORE  300UL
 
-// ── Timestamp mínimo válido ───────────────────────────────────────────────────
+// ── Timestamp mínimo válido ──────────────────────────────────────────────────
 static const unsigned long MIN_VALID_TS = 1000000000UL;
 
 // ── Pines ESP32-CAM AI Thinker (OV2640) ──────────────────────────────────────
@@ -112,45 +97,6 @@ static const unsigned long MIN_VALID_TS = 1000000000UL;
 #define PCLK_GPIO_NUM     22
 
 // =============================================================================
-// MQTT / Azure IoT Hub — mismo patrón que cnc_main_node
-// =============================================================================
-WiFiClientSecure tls_client;
-PubSubClient     mqtt_client(tls_client);
-
-// Topics construidos en runtime con CAMERA_DEVICE_ID
-static String TOPIC_TELEMETRY;
-
-// SAS token
-static unsigned long sas_expiry = 0;
-
-// =============================================================================
-// Estado de publicación (control de tasa)
-// =============================================================================
-static unsigned long last_publish_ms = 0;
-static char          last_published_class[32] = "";
-
-// =============================================================================
-// Buffer de frame activo para el callback de Edge Impulse
-// =============================================================================
-static camera_fb_t *g_fb = nullptr;
-
-// Callback requerido por signal_t del SDK de Edge Impulse.
-// EI llama a esta función para leer pixels en formato empaquetado RGB (uint24 en float).
-// El buffer de la cámara está en formato RGB565 (2 bytes por pixel).
-static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
-  const uint8_t *buf = g_fb->buf;
-  for (size_t i = 0; i < length; i++) {
-    size_t   px_idx = offset + i;
-    uint16_t pixel  = ((uint16_t)buf[px_idx * 2] << 8) | buf[px_idx * 2 + 1];
-    uint8_t  r = ((pixel >> 11) & 0x1F) << 3;
-    uint8_t  g = ((pixel >>  5) & 0x3F) << 2;
-    uint8_t  b =  (pixel        & 0x1F) << 3;
-    out_ptr[i] = (float)((uint32_t)(r << 16) | (uint32_t)(g << 8) | (uint32_t)b);
-  }
-  return EIDSP_OK;
-}
-
-// =============================================================================
 // Estructura de resultado de inferencia
 // =============================================================================
 struct InferenceResult {
@@ -160,6 +106,51 @@ struct InferenceResult {
   int   inference_ms;
   bool  valid;
 };
+
+// =============================================================================
+// MQTT / Azure IoT Hub — mismo patrón que cnc_main_node
+// =============================================================================
+WiFiClientSecure tls_client;
+PubSubClient     mqtt_client(tls_client);
+
+static String TOPIC_TELEMETRY;
+static unsigned long sas_expiry = 0;
+
+// =============================================================================
+// Estado de publicación (control de tasa)
+// =============================================================================
+static unsigned long last_publish_ms = 0;
+static char last_published_class[32] = "";
+
+// =============================================================================
+// Buffer de frame activo para el callback de Edge Impulse
+// =============================================================================
+static camera_fb_t *g_fb = nullptr;
+
+// Callback requerido por signal_t del SDK de Edge Impulse.
+static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
+  if (g_fb == nullptr || g_fb->buf == nullptr) {
+    return -1;
+  }
+
+  size_t pixel_ix = offset * 2;
+  for (size_t i = 0; i < length; i++) {
+    if (pixel_ix + 1 >= g_fb->len) {
+      return -1;
+    }
+
+    uint16_t pixel = ((uint16_t)g_fb->buf[pixel_ix] << 8) | g_fb->buf[pixel_ix + 1];
+
+    uint8_t r = ((pixel >> 11) & 0x1F) << 3;
+    uint8_t g = ((pixel >> 5) & 0x3F) << 2;
+    uint8_t b = (pixel & 0x1F) << 3;
+
+    out_ptr[i] = (float)(((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b);
+    pixel_ix += 2;
+  }
+
+  return 0;
+}
 
 // =============================================================================
 // Inicialización de la cámara con resolución para Edge Impulse
@@ -187,6 +178,7 @@ bool initCamera() {
   config.jpeg_quality = 12;
   config.fb_count     = 1;
   config.fb_location  = psramFound() ? CAMERA_FB_IN_PSRAM : CAMERA_FB_IN_DRAM;
+  config.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -201,8 +193,11 @@ bool initCamera() {
   s->set_gain_ctrl(s, 1);
   s->set_hmirror(s, 0);
   s->set_vflip(s, 0);
+  s->set_brightness(s, 0);
+  s->set_contrast(s, 0);
+  s->set_saturation(s, 0);
 
-  Serial.println("[CAM] Cámara inicializada (96×96 RGB565).");
+  Serial.println("[CAM] Cámara inicializada (96x96 RGB565).");
   return true;
 }
 
@@ -219,7 +214,7 @@ InferenceResult runInference() {
     return result;
   }
 
-  if ((int)g_fb->width  != EI_CLASSIFIER_INPUT_WIDTH ||
+  if ((int)g_fb->width != EI_CLASSIFIER_INPUT_WIDTH ||
       (int)g_fb->height != EI_CLASSIFIER_INPUT_HEIGHT) {
     Serial.printf("[EI] Dimensiones incorrectas: %ux%u (esperado %dx%d)\n",
       g_fb->width, g_fb->height,
@@ -231,12 +226,12 @@ InferenceResult runInference() {
 
   signal_t signal;
   signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
-  signal.get_data     = &ei_camera_get_data;
+  signal.get_data = &ei_camera_get_data;
 
   ei_impulse_result_t ei_result = {};
   unsigned long t_start = millis();
-  EI_IMPULSE_ERROR err  = run_classifier(&signal, &ei_result, false);
-  result.inference_ms   = (int)(millis() - t_start);
+  EI_IMPULSE_ERROR err = run_classifier(&signal, &ei_result, false);
+  result.inference_ms = (int)(millis() - t_start);
 
   esp_camera_fb_return(g_fb);
   g_fb = nullptr;
@@ -254,11 +249,11 @@ InferenceResult runInference() {
     }
   }
 
-  strncpy(result.pcb_class, ei_result.classification[best_idx].label,
+  strncpy(result.pcb_class, ei_classifier_inferencing_categories[best_idx],
           sizeof(result.pcb_class) - 1);
   result.pcb_class[sizeof(result.pcb_class) - 1] = '\0';
   result.confidence = result.probs[best_idx];
-  result.valid      = true;
+  result.valid = true;
 
   Serial.printf("[EI] Clase: %-12s | Confianza: %.3f | Tiempo: %dms\n",
     result.pcb_class, result.confidence, result.inference_ms);
@@ -270,10 +265,10 @@ InferenceResult runInference() {
 // Determinar si se debe publicar (control de tasa)
 // =============================================================================
 bool shouldPublish(const char *current_class) {
-  unsigned long now    = millis();
+  unsigned long now = millis();
   bool timeout_reached = (now - last_publish_ms) >= PUBLISH_INTERVAL_MS;
-  bool class_changed   = (strncmp(current_class, last_published_class,
-                                  sizeof(last_published_class)) != 0);
+  bool class_changed = (strncmp(current_class, last_published_class,
+                                sizeof(last_published_class)) != 0);
 
   if (timeout_reached) {
     Serial.printf("[PUB] Timeout alcanzado (%lu ms). Publicando.\n",
@@ -290,12 +285,10 @@ bool shouldPublish(const char *current_class) {
 
 // =============================================================================
 // Helpers WiFi, NTP, SAS token y MQTT
-// — misma implementación que cnc_main_node con adaptaciones mínimas —
 // =============================================================================
-
 void conectarWiFi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.printf("[WiFi] Conectando a %s ", WIFI_SSID);
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED) {
@@ -343,11 +336,11 @@ static String urlEncode(const String &str) {
 }
 
 static String createSasToken(const char *host, const char *deviceId,
-                              const char *primaryKey, unsigned long ttlSeconds) {
-  String resource        = String(host) + "/devices/" + String(deviceId);
+                             const char *primaryKey, unsigned long ttlSeconds) {
+  String resource = String(host) + "/devices/" + String(deviceId);
   String resourceEncoded = urlEncode(resource);
-  unsigned long expiry   = (unsigned long)time(nullptr) + ttlSeconds;
-  String toSign          = resourceEncoded + "\n" + String(expiry);
+  unsigned long expiry = (unsigned long)time(nullptr) + ttlSeconds;
+  String toSign = resourceEncoded + "\n" + String(expiry);
 
   size_t keyLen = strlen(primaryKey);
   unsigned char keyBin[128];
@@ -360,7 +353,10 @@ static String createSasToken(const char *host, const char *deviceId,
 
   unsigned char hmac[32];
   const mbedtls_md_info_t *mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-  if (!mdInfo) { Serial.println("[SAS] md_info NULL"); return ""; }
+  if (!mdInfo) {
+    Serial.println("[SAS] md_info NULL");
+    return "";
+  }
   if (mbedtls_md_hmac(mdInfo, keyBin, keyBinLen,
                       (const unsigned char *)toSign.c_str(), toSign.length(),
                       hmac) != 0) {
@@ -375,7 +371,7 @@ static String createSasToken(const char *host, const char *deviceId,
     return "";
   }
 
-  String sig        = String((char *)sigB64).substring(0, sigB64Len);
+  String sig = String((char *)sigB64).substring(0, sigB64Len);
   String sigEncoded = urlEncode(sig);
   return "SharedAccessSignature sr=" + resourceEncoded +
          "&sig=" + sigEncoded + "&se=" + String(expiry);
@@ -433,15 +429,14 @@ bool publishToIoTHub(const InferenceResult &res) {
   doc["timestamp"] = (ts > MIN_VALID_TS) ? (long)ts : (long)(millis() / 1000UL);
 
   JsonObject camera = doc.createNestedObject("camera");
-  camera["pcb_class"]     = res.pcb_class;
-  camera["confidence"]    = serialized(String(res.confidence, 3));
-  camera["inference_ms"]  = res.inference_ms;
+  camera["pcb_class"] = res.pcb_class;
+  camera["confidence"] = res.confidence;
+  camera["inference_ms"] = res.inference_ms;
   camera["model_version"] = MODEL_VERSION;
 
   JsonObject probs = camera.createNestedObject("probabilities");
   for (int i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
-    probs[ei_classifier_inferencing_categories[i]] =
-      serialized(String(res.probs[i], 3));
+    probs[ei_classifier_inferencing_categories[i]] = res.probs[i];
   }
 
   char payload[512];
@@ -466,11 +461,9 @@ void setup() {
     ESP.restart();
   }
 
-  // Wi-Fi → NTP → Azure IoT Hub
   conectarWiFi();
   setupTime();
 
-  // Topic dinámico con CAMERA_DEVICE_ID
   TOPIC_TELEMETRY = String("devices/") + CAMERA_DEVICE_ID + "/messages/events/";
 
   conectarAzureIoT();
@@ -482,7 +475,6 @@ void setup() {
 // Loop — inferencia continua con publicación controlada por MQTT
 // =============================================================================
 void loop() {
-  // Mantener conexión a Azure IoT Hub activa y SAS vigente
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[WiFi] Reconectando...");
     WiFi.reconnect();
@@ -495,14 +487,12 @@ void loop() {
     mqtt_client.loop();
   }
 
-  // Ejecutar inferencia
   InferenceResult res = runInference();
   if (!res.valid) {
     delay(500);
     return;
   }
 
-  // Aplicar regla de publicación controlada
   if (shouldPublish(res.pcb_class)) {
     if (publishToIoTHub(res)) {
       last_publish_ms = millis();
@@ -511,6 +501,5 @@ void loop() {
     }
   }
 
-  // Breve pausa para no sobrecalentar el SoC
   delay(200);
 }

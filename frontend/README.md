@@ -216,7 +216,7 @@ La implementación de las gráficas (p.ej. con Chart.js o canvas nativo) se inco
 
 ---
 
-
+## Problemas comunes
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|

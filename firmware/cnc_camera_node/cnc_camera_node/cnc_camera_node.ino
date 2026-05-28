@@ -41,7 +41,7 @@
 //   - esp32 board package (Espressif, >= 2.0.0)
 //   - ArduinoJson (Benoit Blanchon, >= 6.21)
 //   - PubSubClient (Nick O'Leary, >= 2.8)
-//   - CNC_Image_Clasification_inferencing (exportar desde Edge Impulse como librería Arduino)
+//   - CNC_Image_Clasification_inferencing
 //
 // Board settings:
 //   - Board: AI Thinker ESP32-CAM
@@ -66,7 +66,9 @@
 #define MODEL_VERSION     "1.0.0"
 
 // ── Control de publicación ───────────────────────────────────────────────────
-#define PUBLISH_INTERVAL_MS  10000UL
+#define PUBLISH_INTERVAL_MS        10000UL
+#define INFERENCE_INTERVAL_MS       3000UL
+#define MQTT_RECONNECT_INTERVAL_MS  15000UL
 
 // ── NTP ───────────────────────────────────────────────────────────────────────
 #define NTP_SERVER       "pool.ntp.org"
@@ -96,6 +98,9 @@ static const unsigned long MIN_VALID_TS = 1000000000UL;
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+#define FLASH_ENABLED 1
+#define FLASH_PIN     4
+
 // =============================================================================
 // Estructura de resultado de inferencia
 // =============================================================================
@@ -115,6 +120,8 @@ PubSubClient     mqtt_client(tls_client);
 
 static String TOPIC_TELEMETRY;
 static unsigned long sas_expiry = 0;
+static unsigned long last_mqtt_reconnect_attempt = 0;
+static unsigned long last_inference_ms = 0;
 
 // =============================================================================
 // Estado de publicación (control de tasa)
@@ -127,13 +134,16 @@ static char last_published_class[32] = "";
 // =============================================================================
 static camera_fb_t *g_fb = nullptr;
 
-// Callback requerido por signal_t del SDK de Edge Impulse.
+// =============================================================================
+// Callback requerido por signal_t del SDK de Edge Impulse
+// =============================================================================
 static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
   if (g_fb == nullptr || g_fb->buf == nullptr) {
     return -1;
   }
 
   size_t pixel_ix = offset * 2;
+
   for (size_t i = 0; i < length; i++) {
     if (pixel_ix + 1 >= g_fb->len) {
       return -1;
@@ -153,7 +163,19 @@ static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
 }
 
 // =============================================================================
-// Inicialización de la cámara con resolución para Edge Impulse
+// Flash control
+// =============================================================================
+void setFlash(bool on) {
+#if FLASH_ENABLED
+  pinMode(FLASH_PIN, OUTPUT);
+  digitalWrite(FLASH_PIN, on ? HIGH : LOW);
+#else
+  (void)on;
+#endif
+}
+
+// =============================================================================
+// Inicialización de cámara con resolución para Edge Impulse
 // =============================================================================
 bool initCamera() {
   camera_config_t config;
@@ -290,6 +312,7 @@ void conectarWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.printf("[WiFi] Conectando a %s ", WIFI_SSID);
+
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -299,18 +322,21 @@ void conectarWiFi() {
       tries = 0;
     }
   }
+
   Serial.printf("\n[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void setupTime() {
   configTime(0, 0, NTP_SERVER, "time.nist.gov");
   Serial.print("[NTP] Sincronizando");
+
   int tries = 0;
   while (time(nullptr) < (time_t)MIN_VALID_TS && tries < 60) {
     Serial.print(".");
     delay(500);
     tries++;
   }
+
   Serial.println();
   if (time(nullptr) < (time_t)MIN_VALID_TS) {
     Serial.println("[NTP] No se sincronizó — timestamp podría ser 0");
@@ -357,6 +383,7 @@ static String createSasToken(const char *host, const char *deviceId,
     Serial.println("[SAS] md_info NULL");
     return "";
   }
+
   if (mbedtls_md_hmac(mdInfo, keyBin, keyBinLen,
                       (const unsigned char *)toSign.c_str(), toSign.length(),
                       hmac) != 0) {
@@ -373,6 +400,7 @@ static String createSasToken(const char *host, const char *deviceId,
 
   String sig = String((char *)sigB64).substring(0, sigB64Len);
   String sigEncoded = urlEncode(sig);
+
   return "SharedAccessSignature sr=" + resourceEncoded +
          "&sig=" + sigEncoded + "&se=" + String(expiry);
 }
@@ -391,10 +419,12 @@ void conectarAzureIoT() {
     delay(5000);
     return;
   }
+
   sas_expiry = (unsigned long)time(nullptr) + SAS_TTL;
 
   Serial.printf("[MQTT] Conectando a %s (SAS expira en %lus)...\n",
                 IOT_HUB_HOST, SAS_TTL);
+
   if (mqtt_client.connect(CAMERA_DEVICE_ID, username.c_str(), sas.c_str())) {
     Serial.println("[MQTT] Conectado a Azure IoT Hub");
   } else {
@@ -405,6 +435,7 @@ void conectarAzureIoT() {
 // Verifica que el SAS no haya expirado y que la conexión esté activa.
 void ensureSasAndConnection() {
   unsigned long now = (unsigned long)time(nullptr);
+
   if (sas_expiry > 0 && now >= (sas_expiry - SAS_RENEW_BEFORE)) {
     Serial.println("[SAS] Token próximo a expirar — reconectando para renovar");
     if (mqtt_client.connected()) {
@@ -412,7 +443,12 @@ void ensureSasAndConnection() {
       delay(200);
     }
   }
+
   if (!mqtt_client.connected()) {
+    if (millis() - last_mqtt_reconnect_attempt < MQTT_RECONNECT_INTERVAL_MS) {
+      return;
+    }
+    last_mqtt_reconnect_attempt = millis();
     Serial.println("[MQTT] Sin conexión — intentando reconectar...");
     conectarAzureIoT();
   }
@@ -452,8 +488,13 @@ bool publishToIoTHub(const InferenceResult &res) {
 // =============================================================================
 void setup() {
   Serial.begin(115200);
+  delay(500);
+
   Serial.println("\n[BOOT] cnc_camera_node — ESP32-CAM + MQTTS + Edge Impulse PCB Classifier");
   Serial.printf("[BOOT] PUBLISH_INTERVAL_MS=%lu\n", PUBLISH_INTERVAL_MS);
+  Serial.printf("[BOOT] Reset reason: %d\n", (int)esp_reset_reason());
+  Serial.printf("[BOOT] Free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[BOOT] Free PSRAM: %u\n", ESP.getFreePsram());
 
   if (!initCamera()) {
     Serial.println("[BOOT] Fallo crítico de cámara. Reiniciando en 5s...");
@@ -467,6 +508,14 @@ void setup() {
   TOPIC_TELEMETRY = String("devices/") + CAMERA_DEVICE_ID + "/messages/events/";
 
   conectarAzureIoT();
+
+  #if FLASH_ENABLED
+  setFlash(true);
+  Serial.println("[BOOT] Flash habilitado.");
+#else
+  setFlash(false);
+  Serial.println("[BOOT] Flash deshabilitado.");
+#endif
 
   Serial.println("[BOOT] Listo. Iniciando inferencia...");
 }
@@ -487,9 +536,15 @@ void loop() {
     mqtt_client.loop();
   }
 
+  if (millis() - last_inference_ms < INFERENCE_INTERVAL_MS) {
+    delay(50);
+    return;
+  }
+  last_inference_ms = millis();
+
   InferenceResult res = runInference();
   if (!res.valid) {
-    delay(500);
+    delay(200);
     return;
   }
 
@@ -501,5 +556,5 @@ void loop() {
     }
   }
 
-  delay(200);
+  delay(100);
 }

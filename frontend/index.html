@@ -101,6 +101,41 @@
       </div>
     </section>
 
+    <!-- Panel colapsable — Series de tiempo (últimos 5 minutos) -->
+    <section class="section">
+      <button class="accordion-toggle" id="timeseries-toggle"
+              onclick="toggleTimeSeries()" aria-expanded="false">
+        <span>📈 Series de tiempo — Últimos 5 minutos</span>
+        <span class="accordion-toggle__icon" id="timeseries-icon">▼</span>
+      </button>
+      <div id="timeseries-panel" class="timeseries-panel hidden">
+        <p class="timeseries-hint">
+          📌 Panel preparado para visualización histórica basada en
+          <code>timestamp</code>. La implementación de gráficas se
+          incorporará en una próxima versión. El buffer de 5 minutos
+          (<code>timeSeriesBuffer</code>) ya se alimenta en cada ciclo
+          de polling y está disponible para su uso.
+        </p>
+        <div class="timeseries-charts">
+          <div class="timeseries-chart-slot" id="chart-temp">
+            <div class="timeseries-chart-label">🌡️ Temperatura (°C)</div>
+            <canvas id="canvas-temp" class="timeseries-canvas"
+                    aria-label="Gráfica de temperatura"></canvas>
+          </div>
+          <div class="timeseries-chart-slot" id="chart-hum">
+            <div class="timeseries-chart-label">💧 Humedad (%)</div>
+            <canvas id="canvas-hum" class="timeseries-canvas"
+                    aria-label="Gráfica de humedad"></canvas>
+          </div>
+          <div class="timeseries-chart-slot" id="chart-vib">
+            <div class="timeseries-chart-label">📊 Score Anomalía Vibracional</div>
+            <canvas id="canvas-vib" class="timeseries-canvas"
+                    aria-label="Gráfica de score de anomalía vibracional"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Control de Actuador -->
     <section class="section">
       <h2 class="section__title">Control del Actuador</h2>

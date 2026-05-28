@@ -40,6 +40,28 @@ const PCB_CLASS_ICONS = {
 
 let refreshTimer = null;
 
+// ── Último estado válido (retención ante payloads parciales) ─────────────────
+// Permite que documentos del nodo de cámara (con campos nulos) no borren los
+// últimos valores válidos del nodo principal.
+const lastValidState = {
+  temperature:             null,
+  humidity:                null,
+  vibration_status:        null,
+  vibration_anomaly_score: null,
+  alerts:                  null,
+};
+
+// ── Buffer de series de tiempo (ventana de 5 minutos) ────────────────────────
+// Acumula puntos de datos basados en el campo `timestamp` del documento.
+// Solo retiene los puntos dentro de la ventana de los últimos 5 minutos.
+const TIME_WINDOW_MS = 5 * 60 * 1000; // 5 minutos en milisegundos
+const timeSeriesBuffer = {
+  temperature:             [], // [{ ts: Number (epoch ms), value: Number }]
+  humidity:                [], // [{ ts: Number (epoch ms), value: Number }]
+  vibration_anomaly_score: [], // [{ ts: Number (epoch ms), value: Number }]
+};
+let lastPushedTimestamp = 0; // Evita duplicados en cada ciclo de polling
+
 // ---------------------------------------------------------------------------
 // Inicio
 // ---------------------------------------------------------------------------
@@ -94,60 +116,100 @@ async function fetchData() {
 
 // ---------------------------------------------------------------------------
 // Renderizado de métricas (tarjetas superiores — nodo principal)
+// Los valores null/undefined del payload no borran el último estado válido.
 // ---------------------------------------------------------------------------
 function renderMetrics(data) {
   if (!data || data.length === 0) {
-    ["temp", "hum", "vib", "anom-vib", "alert"].forEach((id) => {
-      setText(`val-${id}`, "—");
-      setBadge(`badge-${id}`, "", "");
-      setCardState(`card-${id}`, "");
-    });
-    hideAlertReasons();
+    // Si aún no hay ningún estado válido, mostrar marcadores vacíos
+    if (lastValidState.temperature === null && lastValidState.humidity === null &&
+        lastValidState.vibration_status === null && lastValidState.vibration_anomaly_score === null) {
+      ["temp", "hum", "vib", "anom-vib", "alert"].forEach((id) => {
+        setText(`val-${id}`, "—");
+        setBadge(`badge-${id}`, "", "");
+        setCardState(`card-${id}`, "");
+      });
+      hideAlertReasons();
+    }
+    // Si ya hay estado previo, conservar lo mostrado sin borrar nada
     return;
   }
 
-  const latest     = data[0];
-  const sensors    = latest.sensors    || {};
-  const predictions = latest.predictions || {};
-  const alerts     = latest.alerts     || {};
+  // Actualizar buffer de series de tiempo con todos los documentos recibidos
+  pushToTimeSeries(data);
 
-  // Temperatura
-  const temp = parseFloat(sensors.temperature);
+  const latest      = data[0];
+  const sensors     = latest.sensors     || {};
+  const predictions = latest.predictions || {};
+  const alerts      = latest.alerts      || {};
+  const isCameraDoc = latest.device_type === "camera";
+
+  // ── Temperatura ────────────────────────────────────────────────────────────
+  if (sensors.temperature !== null && sensors.temperature !== undefined) {
+    lastValidState.temperature = sensors.temperature;
+  }
+  const temp = parseFloat(lastValidState.temperature);
   const tempAlert = !isNaN(temp) && (temp < THRESHOLDS.tempMin || temp > THRESHOLDS.tempMax);
   setText("val-temp", isNaN(temp) ? "—" : temp.toFixed(1));
-  setCardState("card-temp", tempAlert ? "alert" : "ok");
-  setBadge("badge-temp", tempAlert ? "⚠ Fuera de rango" : "✓ Normal", tempAlert ? "warn" : "ok");
+  setCardState("card-temp", isNaN(temp) ? "" : (tempAlert ? "alert" : "ok"));
+  setBadge("badge-temp",
+    isNaN(temp) ? "" : (tempAlert ? "⚠ Fuera de rango" : "✓ Normal"),
+    isNaN(temp) ? "" : (tempAlert ? "warn" : "ok"));
 
-  // Humedad
-  const hum = parseFloat(sensors.humidity);
+  // ── Humedad ────────────────────────────────────────────────────────────────
+  if (sensors.humidity !== null && sensors.humidity !== undefined) {
+    lastValidState.humidity = sensors.humidity;
+  }
+  const hum = parseFloat(lastValidState.humidity);
   const humAlert = !isNaN(hum) && (hum < THRESHOLDS.humMin || hum > THRESHOLDS.humMax);
   setText("val-hum", isNaN(hum) ? "—" : hum.toFixed(1));
-  setCardState("card-hum", humAlert ? "alert" : "ok");
-  setBadge("badge-hum", humAlert ? "⚠ Fuera de rango" : "✓ Normal", humAlert ? "warn" : "ok");
+  setCardState("card-hum", isNaN(hum) ? "" : (humAlert ? "alert" : "ok"));
+  setBadge("badge-hum",
+    isNaN(hum) ? "" : (humAlert ? "⚠ Fuera de rango" : "✓ Normal"),
+    isNaN(hum) ? "" : (humAlert ? "warn" : "ok"));
 
-  // Estado vibracional
-  const vibStatus = (sensors.vibration_status || "—").toLowerCase();
+  // ── Estado vibracional ─────────────────────────────────────────────────────
+  if (sensors.vibration_status !== null && sensors.vibration_status !== undefined) {
+    lastValidState.vibration_status = sensors.vibration_status;
+  }
+  const vibStatus = (lastValidState.vibration_status || "").toLowerCase();
   const vibAlert  = vibStatus === "anomalia";
-  setText("val-vib", sensors.vibration_status || "—");
-  setCardState("card-vib", vibAlert ? "alert" : "ok");
-  setBadge("badge-vib", vibAlert ? "⚠ Anomalía" : "✓ Normal", vibAlert ? "alert" : "ok");
+  setText("val-vib", lastValidState.vibration_status || "—");
+  setCardState("card-vib",
+    lastValidState.vibration_status ? (vibAlert ? "alert" : "ok") : "");
+  setBadge("badge-vib",
+    lastValidState.vibration_status ? (vibAlert ? "⚠ Anomalía" : "✓ Normal") : "",
+    lastValidState.vibration_status ? (vibAlert ? "alert" : "ok") : "");
 
-  // Score de anomalía vibracional
-  const vibScore = predictions.vibration_anomaly_score;
-  const vibScoreAlert = vibScore !== null && vibScore !== undefined && parseFloat(vibScore) >= THRESHOLDS.vibAnom;
-  setText("val-anom-vib", vibScore !== null && vibScore !== undefined ? parseFloat(vibScore).toFixed(3) : "—");
-  setCardState("card-anom-vib", vibScoreAlert ? "alert" : "ok");
-  setBadge("badge-anom-vib", vibScoreAlert ? "⚠ Alto" : "✓ Normal", vibScoreAlert ? "alert" : "ok");
+  // ── Score de anomalía vibracional ──────────────────────────────────────────
+  const rawVibScore = predictions.vibration_anomaly_score;
+  if (rawVibScore !== null && rawVibScore !== undefined) {
+    lastValidState.vibration_anomaly_score = rawVibScore;
+  }
+  const vibScoreVal = lastValidState.vibration_anomaly_score !== null &&
+                      lastValidState.vibration_anomaly_score !== undefined
+    ? parseFloat(lastValidState.vibration_anomaly_score) : NaN;
+  const vibScoreAlert = !isNaN(vibScoreVal) && vibScoreVal >= THRESHOLDS.vibAnom;
+  setText("val-anom-vib", !isNaN(vibScoreVal) ? vibScoreVal.toFixed(3) : "—");
+  setCardState("card-anom-vib", !isNaN(vibScoreVal) ? (vibScoreAlert ? "alert" : "ok") : "");
+  setBadge("badge-anom-vib",
+    !isNaN(vibScoreVal) ? (vibScoreAlert ? "⚠ Alto" : "✓ Normal") : "",
+    !isNaN(vibScoreVal) ? (vibScoreAlert ? "alert" : "ok") : "");
 
-  // Estado de alerta general
-  const alertActive = alerts.active === true;
+  // ── Estado de alerta general ───────────────────────────────────────────────
+  // Solo se actualiza con documentos del nodo principal para no borrar alertas
+  // activas cuando llega un payload del nodo de cámara sin datos de alerta.
+  if (!isCameraDoc) {
+    lastValidState.alerts = alerts;
+  }
+  const activeAlerts = lastValidState.alerts || {};
+  const alertActive  = activeAlerts.active === true;
   setText("val-alert", alertActive ? "ALERTA" : "Normal");
   setCardState("card-alert", alertActive ? "alert" : "ok");
   setBadge("badge-alert", alertActive ? "🚨 Activa" : "✓ Inactiva", alertActive ? "alert" : "ok");
 
   // Panel de motivos de alerta
-  if (alertActive && Array.isArray(alerts.reasons) && alerts.reasons.length > 0) {
-    showAlertReasons(alerts.reasons);
+  if (alertActive && Array.isArray(activeAlerts.reasons) && activeAlerts.reasons.length > 0) {
+    showAlertReasons(activeAlerts.reasons);
   } else {
     hideAlertReasons();
   }
@@ -184,8 +246,8 @@ function renderTable(data) {
     return `<tr class="${alertRow}">
       <td>${escapeHtml(ts)}</td>
       <td>${escapeHtml(item.device_id || "—")}</td>
-      <td>${s.temperature !== undefined ? parseFloat(s.temperature).toFixed(1) : "—"}</td>
-      <td>${s.humidity    !== undefined ? parseFloat(s.humidity).toFixed(1)    : "—"}</td>
+      <td>${(s.temperature !== undefined && s.temperature !== null) ? parseFloat(s.temperature).toFixed(1) : "—"}</td>
+      <td>${(s.humidity    !== undefined && s.humidity    !== null) ? parseFloat(s.humidity).toFixed(1)    : "—"}</td>
       <td class="${(s.vibration_status || "").toLowerCase() === "anomalia" ? "cell--alert" : ""}">
         ${escapeHtml(s.vibration_status || "—")}
       </td>
@@ -334,6 +396,65 @@ function renderCameraCard(item) {
     + ` | Inferencia: ${infMs}`
     + ` | Modelo: ${escapeHtml(cam.model_version || "—")}`
     + ` | Actualizado: ${ts}`;
+}
+
+// ---------------------------------------------------------------------------
+// Series de tiempo — buffer de 5 minutos basado en timestamp del documento
+// ---------------------------------------------------------------------------
+
+/**
+ * Agrega al buffer los puntos de datos de `data` que sean más recientes que
+ * el último timestamp procesado, y elimina los puntos fuera de la ventana.
+ * Diseñado para ser llamado en cada ciclo de polling sin crear duplicados.
+ */
+function pushToTimeSeries(data) {
+  if (!data || data.length === 0) return;
+
+  const now    = Date.now();
+  const cutoff = now - TIME_WINDOW_MS;
+
+  data.forEach((item) => {
+    const ts = item.timestamp ? item.timestamp * 1000 : null;
+    if (!ts || ts <= lastPushedTimestamp || ts < cutoff) return;
+
+    const s = item.sensors    || {};
+    const p = item.predictions || {};
+
+    const temp  = (s.temperature !== null && s.temperature !== undefined)
+      ? parseFloat(s.temperature) : null;
+    const hum   = (s.humidity    !== null && s.humidity    !== undefined)
+      ? parseFloat(s.humidity)    : null;
+    const score = (p.vibration_anomaly_score !== null && p.vibration_anomaly_score !== undefined)
+      ? parseFloat(p.vibration_anomaly_score) : null;
+
+    if (temp  !== null && !isNaN(temp))  timeSeriesBuffer.temperature.push({ ts, value: temp });
+    if (hum   !== null && !isNaN(hum))   timeSeriesBuffer.humidity.push({ ts, value: hum });
+    if (score !== null && !isNaN(score)) timeSeriesBuffer.vibration_anomaly_score.push({ ts, value: score });
+  });
+
+  // Actualizar el último timestamp procesado para evitar duplicados
+  const maxTs = data.reduce(
+    (m, d) => Math.max(m, d.timestamp ? d.timestamp * 1000 : 0), 0
+  );
+  if (maxTs > lastPushedTimestamp) lastPushedTimestamp = maxTs;
+
+  // Podar puntos fuera de la ventana de 5 minutos
+  timeSeriesBuffer.temperature             = timeSeriesBuffer.temperature.filter(p => p.ts >= cutoff);
+  timeSeriesBuffer.humidity                = timeSeriesBuffer.humidity.filter(p => p.ts >= cutoff);
+  timeSeriesBuffer.vibration_anomaly_score = timeSeriesBuffer.vibration_anomaly_score.filter(p => p.ts >= cutoff);
+}
+
+/**
+ * Expande/colapsa el panel de series de tiempo.
+ * La implementación de las gráficas se incorporará en una próxima versión.
+ */
+function toggleTimeSeries() {
+  const panel  = document.getElementById("timeseries-panel");
+  const toggle = document.getElementById("timeseries-toggle");
+  const icon   = document.getElementById("timeseries-icon");
+  const hidden = panel.classList.toggle("hidden");
+  toggle.setAttribute("aria-expanded", String(!hidden));
+  icon.textContent = hidden ? "▼" : "▲";
 }
 
 // ---------------------------------------------------------------------------

@@ -159,7 +159,64 @@ Vercel puede servir el frontend directamente desde la carpeta `frontend/` del re
 
 ---
 
-## Problemas comunes
+## Retención del último estado válido
+
+El dashboard mantiene en memoria un objeto `lastValidState` con el último valor válido de cada métrica del nodo principal:
+
+```js
+const lastValidState = {
+  temperature, humidity, vibration_status, vibration_anomaly_score, alerts
+};
+```
+
+### Por qué es necesario
+
+El sistema tiene dos nodos Edge independientes que publican de forma asíncrona:
+
+| Nodo | Campos que envía |
+|---|---|
+| ESP32 (principal) | temperatura, humedad, vibración, score, alertas |
+| ESP32-CAM (cámara) | clasificación PCB, confianza, probabilidades |
+
+Cuando `data[0]` es un documento del nodo de cámara, los campos de sensores vienen como `null` o ausentes. Sin retención de estado, la UI quedaría con `—` en todas las tarjetas de sensores.
+
+### Comportamiento con retención
+
+- Si el campo del payload es `null` o `undefined`, se conserva el último valor válido.
+- Si el campo llega con un valor concreto, se actualiza `lastValidState` y se refleja en pantalla.
+- El campo `alerts` solo se actualiza desde documentos del nodo principal (`device_type !== "camera"`).
+- Si no ha llegado ningún dato aún, se muestran `—` como marcadores neutros.
+
+---
+
+## Panel de series de tiempo (5 minutos)
+
+El dashboard incluye un panel colapsable con estructura preparada para gráficas históricas.
+
+### Estructura del buffer
+
+```js
+const timeSeriesBuffer = {
+  temperature:             [], // [{ ts: Number (epoch ms), value: Number }]
+  humidity:                [],
+  vibration_anomaly_score: [],
+};
+```
+
+- `ts` es el timestamp del documento (`item.timestamp * 1000` → epoch ms).
+- La ventana temporal es estrictamente de **5 minutos** desde el tiempo actual.
+- Los puntos más antiguos se eliminan automáticamente en cada ciclo de polling.
+- Se evitan duplicados rastreando `lastPushedTimestamp`.
+
+### Panel accordion
+
+El panel aparece en el dashboard entre "Estado del Proceso" y "Control del Actuador". Está colapsado por defecto. Al hacer clic en el encabezado se expande y muestra los contenedores `<canvas>` reservados para las gráficas de temperatura, humedad y score vibracional.
+
+La implementación de las gráficas (p.ej. con Chart.js o canvas nativo) se incorporará en una próxima versión sin necesidad de cambiar la estructura del buffer ni del HTML.
+
+---
+
+
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|

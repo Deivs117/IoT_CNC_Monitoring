@@ -31,6 +31,7 @@ RG_NAME="${RG_NAME:-rg-cnc-iot}"
 LOCATION="${LOCATION:-centralus}"
 IOT_HUB_NAME="${IOT_HUB_NAME:-cnc-iot-hub-deiv-deployment}"
 IOT_DEVICE_ID="${IOT_DEVICE_ID:-cnc_fresadora_01}"
+CAMERA_DEVICE_ID="${CAMERA_DEVICE_ID:-cnc_camera_01}"
 COSMOS_ACCOUNT="${COSMOS_ACCOUNT:-cnc-iot-cosmos}"
 COSMOS_DB="CNCMonitor"
 COSMOS_CONTAINER="Telemetry"
@@ -112,6 +113,32 @@ if az iot hub device-identity create \
 else
   warn "Dispositivo '${IOT_DEVICE_ID}' ya existe o no pudo crearse en este intento — continuando."
 fi
+
+# ---------------------------------------------------------------------------
+# 2.b Registro del dispositivo ESP32-CAM
+# ---------------------------------------------------------------------------
+log "Registrando dispositivo '${CAMERA_DEVICE_ID}' en IoT Hub..."
+if az iot hub device-identity show \
+    --hub-name "${IOT_HUB_NAME}" \
+    --device-id "${CAMERA_DEVICE_ID}" \
+    --resource-group "${RG_NAME}" &>/dev/null; then
+  warn "Dispositivo '${CAMERA_DEVICE_ID}' ya existe — omitiendo creación."
+else
+  az iot hub device-identity create \
+    --hub-name "${IOT_HUB_NAME}" \
+    --device-id "${CAMERA_DEVICE_ID}" \
+    --output none
+  ok "Dispositivo '${CAMERA_DEVICE_ID}' registrado en IoT Hub."
+fi
+
+# Obtener la cadena de conexión del dispositivo ESP32-CAM
+CAMERA_DEVICE_CONNECTION_STRING=$(
+  az iot hub device-identity connection-string show \
+    --hub-name "${IOT_HUB_NAME}" \
+    --device-id "${CAMERA_DEVICE_ID}" \
+    --query "connectionString" \
+    --output tsv 2>/dev/null
+)
 
 # ---------------------------------------------------------------------------
 # 3. Azure Cosmos DB — modo Serverless
@@ -263,6 +290,8 @@ RG_NAME="${RG_NAME}"
 LOCATION="${LOCATION}"
 IOT_HUB_NAME="${IOT_HUB_NAME}"
 IOT_DEVICE_ID="${IOT_DEVICE_ID}"
+CAMERA_DEVICE_ID="${CAMERA_DEVICE_ID}"
+CAMERA_DEVICE_CONNECTION_STRING="${CAMERA_DEVICE_CONNECTION_STRING}"
 COSMOS_ACCOUNT="${COSMOS_ACCOUNT}"
 COSMOS_DB="${COSMOS_DB}"
 COSMOS_CONTAINER="${COSMOS_CONTAINER}"

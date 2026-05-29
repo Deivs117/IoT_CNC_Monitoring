@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT CNC PCB Monitor — Exposición Técnica</title>
+  <style>
+    /* ═══════════════════════════════════════════════════════
+       RESET & VARIABLES
+    ════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #080c18;
+      --bg2:      #0d1225;
+      --bg3:      #121830;
+      --card:     #0f1526;
+      --border:   #1e2d4a;
+      --border2:  #2a3d60;
+      --cyan:     #00d4ff;
+      --cyan2:    #00a8cc;
+      --purple:   #7c3aed;
+      --purple2:  #5b21b6;
+      --green:    #10b981;
+      --amber:    #f59e0b;
+      --red:      #ef4444;
+      --txt:      #e2e8f0;
+      --txt2:     #94a3b8;
+      --txt3:     #64748b;
+      --shadow:   0 4px 24px rgba(0,0,0,.5);
+      --glow-c:   0 0 20px rgba(0,212,255,.25);
+      --glow-p:   0 0 20px rgba(124,58,237,.25);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       NAV
+    ════════════════════════════════════════════════════════ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(8,12,24,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+      min-height: 3.5rem;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: .6rem;
+      font-weight: 700; font-size: 1rem; color: var(--cyan);
+      white-space: nowrap; margin-right: .5rem;
+    }
+    .nav-brand svg { flex-shrink: 0; }
+    .nav-links { display: flex; gap: .15rem; flex-wrap: wrap; }
+    .nav-links a {
+      color: var(--txt2); text-decoration: none; font-size: .78rem;
+      padding: .3rem .6rem; border-radius: 6px; transition: all .2s;
+      white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--cyan); background: rgba(0,212,255,.08); }
+    .nav-badge {
+      margin-left: auto; display: flex; align-items: center; gap: .5rem;
+      font-size: .75rem; color: var(--green); white-space: nowrap;
+    }
+    .dot-live {
+      width: 8px; height: 8px; background: var(--green); border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,.6); }
+      50%      { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       LAYOUT
+    ════════════════════════════════════════════════════════ */
+    .page { padding-top: 3.5rem; }
+
+    section {
+      padding: 4rem 1.5rem;
+      max-width: 1200px; margin: 0 auto;
+    }
+    section + section { padding-top: 2rem; }
+
+    /* full-width hero */
+    .hero-wrap {
+      background: linear-gradient(135deg, #080c18 0%, #0d1a3a 50%, #080c18 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 5rem 1.5rem 4rem;
+    }
+    .hero {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr auto; gap: 2rem; align-items: center;
+    }
+    @media(max-width:700px){ .hero { grid-template-columns: 1fr; } }
+    .hero-title {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 800; line-height: 1.1;
+    }
+    .hero-title span { color: var(--cyan); }
+    .hero-sub { color: var(--txt2); margin-top: .75rem; font-size: 1.05rem; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+    .tag {
+      background: rgba(0,212,255,.08); color: var(--cyan);
+      border: 1px solid rgba(0,212,255,.2); border-radius: 20px;
+      padding: .25rem .75rem; font-size: .75rem; font-weight: 600;
+    }
+    .tag.purple { background: rgba(124,58,237,.1); color: #a78bfa; border-color: rgba(124,58,237,.25); }
+    .tag.green  { background: rgba(16,185,129,.08); color: var(--green); border-color: rgba(16,185,129,.2); }
+
+    .hero-stats {
+      display: flex; flex-direction: column; gap: .75rem; text-align: center;
+      flex-shrink: 0;
+    }
+    .stat-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: .9rem 1.4rem;
+    }
+    .stat-box strong { display: block; font-size: 1.6rem; color: var(--cyan); }
+    .stat-box span { font-size: .72rem; color: var(--txt2); }
+
+    /* ═══════════════════════════════════════════════════════
+       SECTION HEADINGS
+    ════════════════════════════════════════════════════════ */
+    .sec-label {
+      display: inline-block; font-size: .72rem; font-weight: 700;
+      color: var(--cyan); letter-spacing: .1em; text-transform: uppercase;
+      margin-bottom: .5rem;
+    }
+    h2.sec-title {
+      font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 800; margin-bottom: .4rem;
+    }
+    .sec-desc { color: var(--txt2); margin-bottom: 2rem; max-width: 640px; }
+
+    /* ═══════════════════════════════════════════════════════
+       CARDS GRID
+    ════════════════════════════════════════════════════════ */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.4rem; transition: all .25s;
+      cursor: default; position: relative; overflow: hidden;
+    }
+    .card::before {
+      content:''; position:absolute; inset:0; border-radius:14px;
+      background: var(--glow-c); opacity:0; transition:.25s;
+    }
+    .card:hover { border-color: var(--cyan); transform: translateY(-3px); box-shadow: var(--glow-c); }
+    .card:hover::before { opacity:1; }
+    .card-icon { font-size: 2rem; margin-bottom: .6rem; }
+    .card-title { font-weight: 700; font-size: .95rem; margin-bottom: .3rem; }
+    .card-desc { font-size: .8rem; color: var(--txt2); margin-bottom: .8rem; }
+    .card-detail {
+      display: none; font-size: .78rem; line-height: 1.5;
+      background: rgba(0,212,255,.05); border: 1px solid rgba(0,212,255,.15);
+      border-radius: 8px; padding: .6rem .8rem; color: var(--txt2);
+    }
+    .card:hover .card-detail { display: block; }
+    .card-badge {
+      display: inline-block; font-size: .68rem; font-weight: 700;
+      padding: .15rem .6rem; border-radius: 20px; margin-top: .5rem;
+    }
+    .badge-smd   { background: rgba(0,212,255,.15); color: var(--cyan); }
+    .badge-th    { background: rgba(124,58,237,.15); color: #a78bfa; }
+    .badge-mixed { background: rgba(245,158,11,.15); color: var(--amber); }
+    .badge-none  { background: rgba(239,68,68,.12); color: var(--red); }
+
+    /* ═══════════════════════════════════════════════════════
+       ARCHITECTURE SVG
+    ════════════════════════════════════════════════════════ */
+    .arch-wrap {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem;
+      position: relative;
+    }
+    #arch-svg {
+      width: 100%; height: auto; display: block;
+    }
+    .arch-tooltip {
+      position: absolute; pointer-events: none;
+      background: rgba(13,18,37,.97); border: 1px solid var(--cyan);
+      border-radius: 10px; padding: .75rem 1rem;
+      font-size: .8rem; max-width: 260px; z-index: 10;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6), var(--glow-c);
+      transition: opacity .15s;
+    }
+    .arch-tooltip strong { color: var(--cyan); display: block; margin-bottom: .3rem; }
+    .arch-tooltip ul { padding-left: 1rem; color: var(--txt2); }
+    .arch-tooltip ul li { margin-bottom: .2rem; }
+
+    /* node hover highlight */
+    .arch-node { cursor: pointer; transition: all .2s; }
+    .arch-node:hover rect,
+    .arch-node:hover ellipse { filter: brightness(1.4); }
+    .arch-node.active rect,
+    .arch-node.active ellipse { stroke-width: 2.5 !important; }
+
+    /* data-flow animation */
+    .flow-line {
+      stroke: var(--cyan); stroke-width: 1.5; fill: none;
+      stroke-dasharray: 6 4; stroke-dashoffset: 0;
+      animation: dash 1.2s linear infinite;
+    }
+    .flow-line.purple { stroke: #a78bfa; }
+    .flow-line.green  { stroke: var(--green); }
+    @keyframes dash { to { stroke-dashoffset: -20; } }
+
+    /* ═══════════════════════════════════════════════════════
+       TIMELINE / STEPS
+    ════════════════════════════════════════════════════════ */
+    .timeline {
+      position: relative; padding-left: 2.5rem;
+    }
+    .timeline::before {
+      content:''; position:absolute; left: .9rem; top:0; bottom:0;
+      width: 2px; background: linear-gradient(to bottom, var(--cyan), var(--purple));
+    }
+    .t-step {
+      position: relative; margin-bottom: 1.5rem;
+    }
+    .t-step::before {
+      content: attr(data-n);
+      position: absolute; left: -2.5rem;
+      width: 1.8rem; height: 1.8rem;
+      background: var(--bg); border: 2px solid var(--cyan);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; color: var(--cyan);
+      transition: all .25s;
+    }
+    .t-step:hover::before {
+      background: var(--cyan); color: var(--bg);
+    }
+    .t-header {
+      display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+      cursor: pointer; padding: .8rem 1rem; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card);
+      transition: all .2s;
+    }
+    .t-header:hover { border-color: var(--cyan); background: rgba(0,212,255,.04); }
+    .t-header h3 { font-size: .92rem; font-weight: 700; flex: 1; }
+    .t-chips { display: flex; gap: .3rem; flex-wrap: wrap; }
+    .chip {
+      font-size: .68rem; padding: .15rem .55rem;
+      border-radius: 20px; font-weight: 600;
+    }
+    .chip-c { background: rgba(0,212,255,.1); color: var(--cyan); border: 1px solid rgba(0,212,255,.2); }
+    .chip-p { background: rgba(124,58,237,.1); color: #a78bfa; border: 1px solid rgba(124,58,237,.2); }
+    .chip-g { background: rgba(16,185,129,.1); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
+    .chip-a { background: rgba(245,158,11,.1); color: var(--amber); border: 1px solid rgba(245,158,11,.2); }
+    .t-body {
+      max-height: 0; overflow: hidden; transition: max-height .35s ease;
+      padding: 0 1rem;
+    }
+    .t-body.open { max-height: 300px; padding-top: .6rem; }
+    .t-body p { font-size: .82rem; color: var(--txt2); }
+
+    /* ═══════════════════════════════════════════════════════
+       AI MODELS
+    ════════════════════════════════════════════════════════ */
+    .models-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+    }
+    @media(max-width:780px){ .models-grid { grid-template-columns: 1fr; } }
+
+    .model-panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+    }
+    .model-header {
+      padding: 1.2rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(0,212,255,.07) 0%, transparent 100%);
+    }
+    .model-header.purple-grad {
+      background: linear-gradient(135deg, rgba(124,58,237,.1) 0%, transparent 100%);
+    }
+    .model-tag {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--cyan); margin-bottom: .3rem;
+    }
+    .model-tag.p { color: #a78bfa; }
+    .model-title { font-size: 1rem; font-weight: 800; }
+    .model-sub { font-size: .78rem; color: var(--txt2); margin-top: .2rem; }
+
+    .model-body { padding: 1.2rem 1.4rem; }
+
+    .kpi-row { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .kpi {
+      flex: 1; min-width: 80px;
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+      padding: .7rem .8rem; text-align: center;
+    }
+    .kpi strong { display: block; font-size: 1.3rem; color: var(--green); line-height: 1; }
+    .kpi span { font-size: .68rem; color: var(--txt2); margin-top: .2rem; display: block; }
+
+    .pipeline {
+      display: flex; align-items: center; gap: .3rem;
+      flex-wrap: wrap; margin-bottom: 1rem;
+    }
+    .pipe-box {
+      background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+      padding: .35rem .7rem; font-size: .72rem; font-weight: 600; color: var(--txt);
+      transition: all .2s; cursor: default; position: relative;
+    }
+    .pipe-box:hover { border-color: var(--cyan); color: var(--cyan); }
+    .pipe-box.highlight { border-color: var(--purple); color: #a78bfa; }
+    .pipe-arrow { color: var(--txt3); font-size: .7rem; }
+
+    .confusion-matrix { margin-top: .8rem; }
+    .confusion-matrix h4 { font-size: .8rem; color: var(--txt2); margin-bottom: .5rem; }
+    .cm-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px;
+      font-size: .68rem;
+    }
+    .cm-cell {
+      background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.15);
+      border-radius: 5px; padding: .4rem .3rem; text-align: center;
+    }
+    .cm-cell.high { background: rgba(16,185,129,.15); border-color: rgba(16,185,129,.3); color: var(--green); }
+    .cm-cell.low  { background: rgba(245,158,11,.1);  border-color: rgba(245,158,11,.25); color: var(--amber); }
+    .cm-cell.header { background: var(--bg); color: var(--txt2); font-weight: 700; }
+
+    .features-list {
+      display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem;
+    }
+    .feat {
+      background: rgba(124,58,237,.1); color: #a78bfa;
+      border: 1px solid rgba(124,58,237,.2); border-radius: 6px;
+      padding: .2rem .55rem; font-size: .72rem; font-family: monospace;
+    }
+
+    .classes-list { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+    .cls-badge {
+      padding: .3rem .8rem; border-radius: 8px; font-size: .78rem; font-weight: 700;
+      border: 1px solid;
+    }
+
+    .note-box {
+      background: rgba(0,212,255,.05); border-left: 3px solid var(--cyan);
+      border-radius: 0 8px 8px 0; padding: .6rem .9rem;
+      font-size: .78rem; color: var(--txt2); margin-top: .8rem;
+    }
+    .note-box.purple { border-color: var(--purple); background: rgba(124,58,237,.05); }
+
+    /* ═══════════════════════════════════════════════════════
+       ALERT MODULE
+    ════════════════════════════════════════════════════════ */
+    .alert-flow {
+      display: flex; align-items: center; gap: .5rem;
+      flex-wrap: wrap; margin-bottom: 1.5rem;
+    }
+    .af-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: .7rem 1rem; font-size: .82rem; font-weight: 600;
+      transition: all .2s; cursor: default; position: relative;
+    }
+    .af-box:hover { border-color: var(--amber); color: var(--amber); }
+    .af-arrow { color: var(--txt3); font-size: 1.1rem; }
+
+    .thresholds {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .75rem; margin-bottom: 1.5rem;
+    }
+    .th-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem;
+    }
+    .th-card h4 { font-size: .82rem; color: var(--txt2); margin-bottom: .4rem; }
+    .th-val { font-size: 1rem; font-weight: 700; color: var(--amber); }
+
+    /* ═══════════════════════════════════════════════════════
+       REQUIREMENTS MATRIX
+    ════════════════════════════════════════════════════════ */
+    .req-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .req-table th {
+      background: var(--bg2); border: 1px solid var(--border);
+      padding: .7rem 1rem; text-align: left; font-size: .78rem;
+      color: var(--txt2); text-transform: uppercase; letter-spacing: .06em;
+    }
+    .req-table td {
+      border: 1px solid var(--border); padding: .7rem 1rem;
+      font-size: .82rem; vertical-align: top;
+    }
+    .req-table tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+    .req-table tr:hover td { background: rgba(0,212,255,.03); }
+    .req-num { color: var(--txt3); font-size: .72rem; font-weight: 700; }
+    .check { color: var(--green); font-size: 1rem; font-weight: 800; }
+    .comp-tag {
+      display: inline-block; font-size: .68rem; padding: .15rem .5rem;
+      border-radius: 20px; font-weight: 700; white-space: nowrap;
+    }
+    .ct-fw { background: rgba(0,212,255,.1); color: var(--cyan); }
+    .ct-bk { background: rgba(124,58,237,.1); color: #a78bfa; }
+    .ct-ai { background: rgba(16,185,129,.1); color: var(--green); }
+    .ct-cl { background: rgba(245,158,11,.1); color: var(--amber); }
+
+    /* eval criteria */
+    .eval-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem; margin-top: 2rem;
+    }
+    .eval-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.2rem; transition: all .2s;
+    }
+    .eval-card:hover { border-color: var(--green); box-shadow: 0 0 16px rgba(16,185,129,.15); }
+    .eval-icon { font-size: 1.5rem; margin-bottom: .5rem; }
+    .eval-cat { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+                color: var(--green); font-weight: 700; margin-bottom: .3rem; }
+    .eval-title { font-size: .9rem; font-weight: 700; margin-bottom: .4rem; }
+    .eval-items { font-size: .78rem; color: var(--txt2); }
+    .eval-items li { margin-bottom: .25rem; padding-left: 1em; position: relative; }
+    .eval-items li::before { content: '✓'; position: absolute; left:0; color: var(--green); }
+
+    /* ═══════════════════════════════════════════════════════
+       DASHBOARD CTA
+    ════════════════════════════════════════════════════════ */
+    .dashboard-banner {
+      background: linear-gradient(135deg, #0d1a3a 0%, #0f0d20 100%);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 2.5rem; text-align: center; position: relative; overflow: hidden;
+    }
+    .dashboard-banner::before {
+      content:''; position:absolute; inset:0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(0,212,255,.12) 0%, transparent 70%);
+    }
+    .dashboard-banner h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: .5rem; }
+    .dashboard-banner p { color: var(--txt2); margin-bottom: 1.5rem; }
+    .btn-dash {
+      display: inline-flex; align-items: center; gap: .6rem;
+      background: linear-gradient(135deg, var(--cyan) 0%, var(--cyan2) 100%);
+      color: var(--bg); padding: .9rem 2rem; border-radius: 10px;
+      font-weight: 800; font-size: .95rem; text-decoration: none;
+      transition: all .2s; box-shadow: 0 4px 20px rgba(0,212,255,.3);
+    }
+    .btn-dash:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,212,255,.45); }
+
+    /* ═══════════════════════════════════════════════════════
+       CONCLUSIONS
+    ════════════════════════════════════════════════════════ */
+    .concl-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+    .concl-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.4rem; text-align: center;
+      transition: all .25s; cursor: default;
+    }
+    .concl-card:hover { border-color: var(--cyan); transform: translateY(-3px);
+      box-shadow: var(--glow-c); }
+    .concl-icon { font-size: 2rem; margin-bottom: .6rem; }
+    .concl-title { font-weight: 800; font-size: .9rem; margin-bottom: .3rem; }
+    .concl-text { font-size: .78rem; color: var(--txt2); }
+
+    /* ═══════════════════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════════════════════ */
+    footer {
+      border-top: 1px solid var(--border); padding: 1.5rem;
+      text-align: center; color: var(--txt3); font-size: .78rem;
+    }
+    footer a { color: var(--cyan); text-decoration: none; }
+
+    /* ═══════════════════════════════════════════════════════
+       MISC UTILITIES
+    ════════════════════════════════════════════════════════ */
+    .sep { border: none; border-top: 1px solid var(--border); margin: 0; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 260px; }
+
+    /* scroll reveal */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* bar chart */
+    .bar-wrap { display: flex; flex-direction: column; gap: .45rem; }
+    .bar-row { display: flex; align-items: center; gap: .6rem; font-size: .75rem; }
+    .bar-label { width: 100px; color: var(--txt2); text-align: right; flex-shrink: 0; }
+    .bar-bg { flex: 1; background: var(--bg2); border-radius: 4px; height: 14px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; width: 0; }
+    .bar-val { width: 48px; color: var(--txt); text-align: left; flex-shrink: 0; font-weight: 700; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<!-- ═══════════════════════════════════════════════════════
+     NAV
+════════════════════════════════════════════════════════ -->
+<nav>
+  <div class="nav-brand">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" stroke="#00d4ff" stroke-width="1.5"/>
+      <path d="M6 11h10M11 6v10" stroke="#00d4ff" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="11" cy="11" r="3" fill="#00d4ff" opacity=".4"/>
+    </svg>
+    IoT CNC Monitor
+  </div>
+  <div class="nav-links">
+    <a href="#contexto">Contexto</a>
+    <a href="#arquitectura">Arquitectura</a>
+    <a href="#metodologia">Metodología</a>
+    <a href="#modelos">Modelos IA</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#alarmas">Alarmas</a>
+    <a href="#requerimientos">Requerimientos</a>
+    <a href="#conclusiones">Conclusiones</a>
+  </div>
+  <div class="nav-badge">
+    <div class="dot-live"></div>
+    Sistema desplegado en Azure
+  </div>
+</nav>
+
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════════════
+     HERO
+════════════════════════════════════════════════════════ -->
+<div class="hero-wrap">
+  <div class="hero">
+    <div>
+      <div class="sec-label">Exposición Académica · IoT + Edge AI + Serverless</div>
+      <h1 class="hero-title">
+        Monitoreo Predictivo<br>
+        de CNC para PCBs<br>
+        <span>con IoT + Edge AI</span>
+      </h1>
+      <p class="hero-sub">
+        Sistema integrado de telemetría, visión artificial embebida, persistencia serverless
+        y alertamiento inteligente para manufactura de placas de circuito impreso.
+      </p>
+      <div class="hero-tags">
+        <span class="tag">ESP32</span>
+        <span class="tag">ESP32-CAM</span>
+        <span class="tag purple">Edge Impulse</span>
+        <span class="tag purple">MobileNetV2 / FOMO</span>
+        <span class="tag">Azure IoT Hub</span>
+        <span class="tag">Cosmos DB</span>
+        <span class="tag green">98.7% Accuracy</span>
+        <span class="tag green">int8 Quantized</span>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-box"><strong>2</strong><span>Nodos ESP32</span></div>
+      <div class="stat-box"><strong>98.7%</strong><span>Acc. Vibración</span></div>
+      <div class="stat-box"><strong>~2 KB</strong><span>Modelo MLP</span></div>
+      <div class="stat-box"><strong>4</strong><span>Clases PCB</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     1. CONTEXTO INDUSTRIAL
+════════════════════════════════════════════════════════ -->
+<section id="contexto">
+  <div class="sec-label">Sección 01</div>
+  <h2 class="sec-title">Caso de Uso: CNC para Manufactura de PCBs</h2>
+  <p class="sec-desc">
+    La fresadora CNC genera variaciones de temperatura, humedad y vibración que afectan directamente
+    la calidad del proceso. La identificación visual del tipo de PCB determina la ruta de manufactura.
+    El sistema monitorea ambos en tiempo real.
+  </p>
+
+  <!-- Impact cards -->
+  <div class="cards-grid reveal" style="margin-bottom:2rem;">
+    <div class="card">
+      <div class="card-icon">🌡️</div>
+      <div class="card-title">Temperatura</div>
+      <div class="card-desc">Rango operativo: 15°C – 45°C</div>
+      <div class="card-detail">
+        El exceso de temperatura degrada el sustrato FR4 y provoca deformación de pistas.
+        Por debajo del límite, el dieléctrico cambia su constante, afectando impedancias controladas.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">💧</div>
+      <div class="card-title">Humedad</div>
+      <div class="card-desc">Rango operativo: 20% – 80%</div>
+      <div class="card-detail">
+        Alta humedad aumenta la resistencia del sustrato y promueve cortocircuitos.
+        Baja humedad genera electrostática que puede dañar componentes sensibles.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📳</div>
+      <div class="card-title">Vibración</div>
+      <div class="card-desc">MPU-6050 + MLP int8 en Edge</div>
+      <div class="card-detail">
+        Vibraciones anómalas rompen fresas, desalinean el material o causan marcas de resonancia.
+        El modelo Edge clasifica: normal, vibración leve y anomalía severa.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📷</div>
+      <div class="card-title">Visión PCB</div>
+      <div class="card-desc">FOMO + MobileNetV2 en ESP32-CAM</div>
+      <div class="card-detail">
+        Identificar el tipo de PCB en bancada activa la ruta de manufactura correcta y bloquea
+        el inicio de proceso cuando la bancada está vacía.
+      </div>
+    </div>
+  </div>
+
+  <!-- PCB type cards -->
+  <div class="sec-label" style="margin-top:2rem;">Clasificación visual — 4 clases PCB</div>
+  <p class="sec-desc" style="margin-top:.3rem;">Pasa el cursor sobre cada tarjeta para ver la implicación operativa</p>
+
+  <div class="cards-grid reveal">
+    <div class="card">
+      <div class="card-icon">🟦</div>
+      <div class="card-title">PCB_SMD</div>
+      <div class="card-badge badge-smd">Solo montaje superficial</div>
+      <div class="card-desc">Componentes soldados en superficie</div>
+      <div class="card-detail">
+        ➜ <strong>Ruta:</strong> Soldadura por reflujo en horno.<br>
+        Requiere pasta de soldadura y stencil.<br>
+        Fresar con tolerancias finas de impedancia.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🟪</div>
+      <div class="card-title">PCB_TH</div>
+      <div class="card-badge badge-th">Through-hole</div>
+      <div class="card-desc">Componentes de inserción pasante</div>
+      <div class="card-detail">
+        ➜ <strong>Ruta:</strong> Soldadura manual o por ola.<br>
+        Requiere taladrado preciso.<br>
+        Tolerancia de posición crítica.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🟧</div>
+      <div class="card-title">PCB_Mixta</div>
+      <div class="card-badge badge-mixed">Proceso complejo</div>
+      <div class="card-desc">SMD + Through-hole coexisten</div>
+      <div class="card-detail">
+        ➜ <strong>Ruta:</strong> Proceso secuencial: primero reflujo SMD,
+        luego inserción manual TH.<br>
+        Mayor control de temperatura.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">⬛</div>
+      <div class="card-title">Sin_PCB</div>
+      <div class="card-badge badge-none">Bloqueo preventivo</div>
+      <div class="card-desc">Bancada vacía detectada</div>
+      <div class="card-detail">
+        ➜ <strong>Acción:</strong> Bloqueo preventivo del proceso.<br>
+        Evita ciclos en vacío que desgastan la fresa.<br>
+        Alerta al operario.
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     2. ARQUITECTURA
+════════════════════════════════════════════════════════ -->
+<section id="arquitectura">
+  <div class="sec-label">Sección 02</div>
+  <h2 class="sec-title">Arquitectura End-to-End</h2>
+  <p class="sec-desc">
+    Haz clic o pasa el cursor sobre cada componente para ver su función, justificación técnica
+    y el flujo de datos que atraviesa.
+  </p>
+
+  <div class="arch-wrap reveal">
+    <div id="arch-tooltip" class="arch-tooltip" style="opacity:0; display:none;"></div>
+    <svg id="arch-svg" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#00d4ff" opacity=".7"/>
+        </marker>
+        <marker id="arr-p" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa" opacity=".7"/>
+        </marker>
+        <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#10b981" opacity=".7"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Background zones -->
+      <rect x="10" y="40" width="180" height="360" rx="12" fill="#0d1225" stroke="#1e2d4a" stroke-width="1"/>
+      <text x="100" y="32" text-anchor="middle" fill="#64748b" font-size="10" font-family="monospace">FIELD DEVICES</text>
+
+      <rect x="210" y="40" width="130" height="360" rx="12" fill="#0d1225" stroke="#1e2d4a" stroke-width="1"/>
+      <text x="275" y="32" text-anchor="middle" fill="#64748b" font-size="10" font-family="monospace">TRANSPORT</text>
+
+      <rect x="360" y="40" width="380" height="360" rx="12" fill="#0d1225" stroke="#1e2d4a" stroke-width="1"/>
+      <text x="550" y="32" text-anchor="middle" fill="#64748b" font-size="10" font-family="monospace">AZURE CLOUD</text>
+
+      <rect x="760" y="40" width="130" height="360" rx="12" fill="#0d1225" stroke="#1e2d4a" stroke-width="1"/>
+      <text x="825" y="32" text-anchor="middle" fill="#64748b" font-size="10" font-family="monospace">OUTPUTS</text>
+
+      <!-- Flow lines -->
+      <!-- ESP32 -> IoT Hub -->
+      <line x1="190" y1="130" x2="360" y2="200" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="5 3" opacity=".5" marker-end="url(#arr)"/>
+      <!-- ESP32-CAM -> IoT Hub -->
+      <line x1="190" y1="300" x2="360" y2="220" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="5 3" opacity=".5" marker-end="url(#arr)"/>
+      <!-- IoT Hub -> Function -->
+      <line x1="460" y1="200" x2="520" y2="200" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="5 3" opacity=".6" marker-end="url(#arr)"/>
+      <!-- Function -> Cosmos -->
+      <line x1="620" y1="200" x2="680" y2="200" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="5 3" opacity=".6" marker-end="url(#arr)"/>
+      <!-- Cosmos -> Dashboard -->
+      <line x1="730" y1="180" x2="760" y2="120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5 3" opacity=".6" marker-end="url(#arr-g)"/>
+      <!-- Function -> Telegram -->
+      <line x1="620" y1="220" x2="760" y2="290" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 3" opacity=".5" marker-end="url(#arr-p)"/>
+      <!-- MQTT legend -->
+      <text x="255" y="155" text-anchor="middle" fill="#00d4ff" font-size="9" opacity=".8">MQTTS</text>
+      <text x="255" y="295" text-anchor="middle" fill="#00d4ff" font-size="9" opacity=".8">MQTTS</text>
+      <text x="490" y="193" text-anchor="middle" fill="#00d4ff" font-size="9" opacity=".8">EventHub</text>
+      <text x="650" y="193" text-anchor="middle" fill="#00d4ff" font-size="9" opacity=".8">upsert</text>
+
+      <!-- ── Nodes ── -->
+
+      <!-- ESP32 Main -->
+      <g class="arch-node" data-id="esp32main"
+         transform="translate(28, 90)">
+        <rect width="145" height="80" rx="10" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <text x="72" y="18" text-anchor="middle" fill="#00d4ff" font-size="11" font-weight="bold">ESP32 Principal</text>
+        <text x="72" y="34" text-anchor="middle" fill="#94a3b8" font-size="9">cnc_fresadora_01</text>
+        <rect x="8" y="42" width="130" height="16" rx="4" fill="#0d1225"/>
+        <text x="72" y="54" text-anchor="middle" fill="#e2e8f0" font-size="9">MPU-6050 · DHT22 · MLP int8</text>
+        <circle cx="132" cy="10" r="5" fill="#10b981" opacity=".7"/>
+      </g>
+
+      <!-- ESP32-CAM -->
+      <g class="arch-node" data-id="esp32cam"
+         transform="translate(28, 260)">
+        <rect width="145" height="80" rx="10" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <text x="72" y="18" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="bold">ESP32-CAM</text>
+        <text x="72" y="34" text-anchor="middle" fill="#94a3b8" font-size="9">cnc_camera_01</text>
+        <rect x="8" y="42" width="130" height="16" rx="4" fill="#0d1225"/>
+        <text x="72" y="54" text-anchor="middle" fill="#e2e8f0" font-size="9">OV2640 · FOMO · MobileNetV2</text>
+        <circle cx="132" cy="10" r="5" fill="#10b981" opacity=".7"/>
+      </g>
+
+      <!-- IoT Hub -->
+      <g class="arch-node" data-id="iothub"
+         transform="translate(370, 165)">
+        <rect width="90" height="60" rx="10" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <text x="45" y="18" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold">Azure</text>
+        <text x="45" y="32" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold">IoT Hub</text>
+        <text x="45" y="50" text-anchor="middle" fill="#64748b" font-size="8">MQTT / AMQP</text>
+      </g>
+
+      <!-- Azure Functions -->
+      <g class="arch-node" data-id="functions"
+         transform="translate(528, 165)">
+        <rect width="90" height="60" rx="10" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <text x="45" y="18" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold">Azure</text>
+        <text x="45" y="32" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold">Functions</text>
+        <text x="45" y="50" text-anchor="middle" fill="#64748b" font-size="8">Python Serverless</text>
+      </g>
+
+      <!-- Cosmos DB -->
+      <g class="arch-node" data-id="cosmos"
+         transform="translate(685, 165)">
+        <ellipse cx="45" cy="15" rx="38" ry="12" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <rect x="7" y="15" width="76" height="35" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"
+              stroke-top="none"/>
+        <ellipse cx="45" cy="50" rx="38" ry="12" fill="#0f1526" stroke="#2a3d60" stroke-width="1.5"/>
+        <text x="45" y="20" text-anchor="middle" fill="#00d4ff" font-size="9" font-weight="bold">Cosmos DB</text>
+        <text x="45" y="36" text-anchor="middle" fill="#94a3b8" font-size="8">CNCMonitor</text>
+        <text x="45" y="48" text-anchor="middle" fill="#64748b" font-size="8">/Telemetry</text>
+      </g>
+
+      <!-- Dashboard -->
+      <g class="arch-node" data-id="dashboard"
+         transform="translate(770, 78)">
+        <rect width="110" height="56" rx="10" fill="#0f1526" stroke="#10b981" stroke-width="1.5"/>
+        <text x="55" y="18" text-anchor="middle" fill="#10b981" font-size="10" font-weight="bold">Dashboard</text>
+        <text x="55" y="32" text-anchor="middle" fill="#94a3b8" font-size="8">HTML/CSS/JS</text>
+        <text x="55" y="46" text-anchor="middle" fill="#64748b" font-size="8">Azure Static Web</text>
+      </g>
+
+      <!-- Telegram -->
+      <g class="arch-node" data-id="telegram"
+         transform="translate(770, 260)">
+        <rect width="110" height="56" rx="10" fill="#0f1526" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="55" y="20" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="bold">Telegram</text>
+        <text x="55" y="36" text-anchor="middle" fill="#94a3b8" font-size="8">Bot API</text>
+        <text x="55" y="50" text-anchor="middle" fill="#64748b" font-size="8">Alertas inteligentes</text>
+      </g>
+
+      <!-- Cosmos -> Functions (get_datos) -->
+      <path d="M730 175 Q745 148 760 135" stroke="#10b981" stroke-width="1" stroke-dasharray="4 3" opacity=".4" fill="none"/>
+
+    </svg>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     3. METODOLOGÍA
+════════════════════════════════════════════════════════ -->
+<section id="metodologia">
+  <div class="sec-label">Sección 03</div>
+  <h2 class="sec-title">Metodología Implementada</h2>
+  <p class="sec-desc">
+    Cada paso del procedimiento del profesor está cubierto. Haz clic en cada ítem para ver el detalle técnico.
+  </p>
+
+  <div class="timeline reveal">
+
+    <div class="t-step" data-n="1">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Determinación del caso de uso y sensores</h3>
+        <div class="t-chips">
+          <span class="chip chip-c">Temperatura</span>
+          <span class="chip chip-c">Humedad</span>
+          <span class="chip chip-p">Vibración</span>
+          <span class="chip chip-p">Clasificación imagen</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Caso: fresadora CNC para manufactura de PCBs. Se monitorean temperatura y humedad (DHT22),
+          vibración / movimiento (MPU-6050 con acelerómetro y giroscopio), y clasificación visual
+          del tipo de PCB (cámara OV2640 en ESP32-CAM). Los cuatro canales cumplen exactamente
+          los cuatro tipos de variable exigidos por el profesor.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="2">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Conexión de sensores a GPIO del ESP32</h3>
+        <div class="t-chips">
+          <span class="chip chip-c">DHT22 → GPIO 4</span>
+          <span class="chip chip-p">MPU-6050 → I²C SDA/SCL</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          DHT22 conectado a GPIO4 con VCC 3.3V y GND. MPU-6050 conectado por I²C:
+          SDA → GPIO21, SCL → GPIO22, alimentación 3.3V. Ambos sensores verificados
+          con resistencias pull-up en las líneas de datos. Wiring documentado en el
+          informe y en <code>firmware/cnc_main_node/sensors.h</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="3">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Instalación de librerías necesarias</h3>
+        <div class="t-chips">
+          <span class="chip chip-c">DHT sensor library</span>
+          <span class="chip chip-c">MPU6050</span>
+          <span class="chip chip-p">Edge Impulse Arduino SDK</span>
+          <span class="chip chip-g">PubSubClient (MQTT)</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Librerías instaladas en Arduino IDE: DHT sensor library (Adafruit), Adafruit_MPU6050,
+          ArduinoJson, PubSubClient (MQTT), WiFi (built-in ESP32), y la librería .zip del
+          proyecto Edge Impulse exportada directamente desde el dashboard de Edge Impulse.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="4">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Verificación mediante monitor serial</h3>
+        <div class="t-chips">
+          <span class="chip chip-c">115200 baud</span>
+          <span class="chip chip-a">Serial.print temperatura/humedad</span>
+          <span class="chip chip-p">Predicciones impresas</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          El firmware imprime en monitor serial (115200 baud) los valores crudos de temperatura,
+          humedad, aceleración XYZ y el resultado de la inferencia del modelo Edge Impulse
+          (clase predicha + score de confianza) antes de publicar por MQTT. Esto permite
+          verificar in-situ sin necesitar red.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="5">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Implementación de modelos de IA</h3>
+        <div class="t-chips">
+          <span class="chip chip-p">MLP 8→16→3 (vibración)</span>
+          <span class="chip chip-p">FOMO MobileNetV2 (PCB)</span>
+          <span class="chip chip-g">int8 quantizado</span>
+          <span class="chip chip-a">Edge Impulse SDK</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Modelo 1: MLP tabular entrenado en Edge Impulse con 8 features (acelerómetro XYZ +
+          temperatura + humedad). Exportado como librería Arduino (.zip). Accuracy 98.7%.
+          Modelo 2: FOMO con MobileNetV2 0.35 para clasificar 4 clases de PCB en ESP32-CAM.
+          Ambos modelos cuantizados int8, ejecutados completamente en Edge.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="6">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Conexión WiFi + MQTT a Azure IoT Hub</h3>
+        <div class="t-chips">
+          <span class="chip chip-c">WiFi.begin()</span>
+          <span class="chip chip-c">MQTTS 8883</span>
+          <span class="chip chip-p">Certificado CA Azure</span>
+          <span class="chip chip-g">PubSubClient</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Ambos nodos conectan a WiFi con <code>WiFi.begin(ssid, password)</code>.
+          La conexión al broker es MQTTS (TLS 1.2, puerto 8883) usando el certificado raíz
+          de Azure IoT Hub. El topic de publicación sigue el formato:
+          <code>devices/{device_id}/messages/events/</code>.
+          Credenciales almacenadas en <code>config.h</code> (no versionado).
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="7">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Almacenamiento en base de datos</h3>
+        <div class="t-chips">
+          <span class="chip chip-p">Cosmos DB Serverless</span>
+          <span class="chip chip-c">telemetry_processor</span>
+          <span class="chip chip-g">EventHub trigger</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Azure Function <code>telemetry_processor</code> se activa por trigger EventHub
+          cuando llega telemetría al IoT Hub. Detecta automáticamente si el payload es
+          del nodo de vibración o de la cámara. Persiste en Cosmos DB NoSQL (DB: CNCMonitor,
+          container: Telemetry) con upsert. El documento incluye sensores, predicciones y alertas.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="8">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Visualización en Dashboard</h3>
+        <div class="t-chips">
+          <span class="chip chip-g">HTML/CSS/JS estático</span>
+          <span class="chip chip-c">Azure Static Web</span>
+          <span class="chip chip-p">Polling GET /api/datos</span>
+          <span class="chip chip-a">Temperatura · Humedad · Vibración · PCB</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          Dashboard HTML puro desplegado como Azure Static Website. Polling cada 5 s a
+          la Azure Function <code>get_datos</code> (GET /api/datos). Muestra temperatura,
+          humedad, estado vibracional, score de anomalía, alerta activa y clasificación
+          PCB con probabilidades por clase. El último valor válido se retiene si el dispositivo
+          no publica.
+        </p>
+      </div>
+    </div>
+
+    <div class="t-step" data-n="9">
+      <div class="t-header" onclick="toggleStep(this)">
+        <h3>Alarmas por Telegram a partir de IA</h3>
+        <div class="t-chips">
+          <span class="chip chip-a">Telegram Bot API</span>
+          <span class="chip chip-p">Umbrales + anomaly score</span>
+          <span class="chip chip-g">Anti-spam cooldown 5 min</span>
+        </div>
+        <span style="color:var(--txt3);font-size:.8rem;">▾</span>
+      </div>
+      <div class="t-body">
+        <p>
+          La función <code>evaluate_alert()</code> en <code>shared_code/alerts.py</code>
+          evalúa temperatura, humedad, estado vibracional y anomaly score (umbral ≥ 0.80).
+          Si hay condición de alerta, <code>maybe_send_telegram_alert()</code> envía
+          mensaje al bot con cooldown de 5 minutos para evitar spam. El campo
+          <code>alerts.telegram_sent</code> se persiste en Cosmos DB.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     4. MODELOS DE IA
+════════════════════════════════════════════════════════ -->
+<section id="modelos">
+  <div class="sec-label">Sección 04</div>
+  <h2 class="sec-title">Modelos de IA — Edge Impulse</h2>
+  <p class="sec-desc">
+    Dos modelos independientes entrenados, cuantizados e integrados en firmware C++.
+    Ejecución completamente en el dispositivo, sin latencia de red para inferencia.
+  </p>
+
+  <div class="models-grid reveal">
+
+    <!-- MODEL A: MLP VIBRATION -->
+    <div class="model-panel">
+      <div class="model-header">
+        <div class="model-tag">Modelo A · Nodo Principal</div>
+        <div class="model-title">MLP Tabular — Vibración + Ambiente</div>
+        <div class="model-sub">ESP32 + MPU-6050 + DHT22</div>
+      </div>
+      <div class="model-body">
+
+        <!-- Pipeline -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.4rem;font-weight:700;">Pipeline Edge Impulse</div>
+        <div class="pipeline">
+          <div class="pipe-box">Acelerómetro XYZ<br><span style="color:var(--txt3);font-size:.65rem;">+ Temperatura + Humedad</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box highlight">Raw Data<br><span style="color:var(--txt3);font-size:.65rem;">8 features</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box">MLP<br><span style="color:var(--txt3);font-size:.65rem;">8→16→3</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box" style="border-color:var(--green);color:var(--green);">Clase<br><span style="color:var(--txt3);font-size:.65rem;">0 · 1 · 2</span></div>
+        </div>
+
+        <!-- Features -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.4rem;font-weight:700;">Features de entrada (8)</div>
+        <div class="features-list">
+          <span class="feat">mean_x</span><span class="feat">var_x</span>
+          <span class="feat">mean_y</span><span class="feat">var_y</span>
+          <span class="feat">mean_z</span><span class="feat">var_z</span>
+          <span class="feat">temperature</span><span class="feat">humidity</span>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-row">
+          <div class="kpi"><strong>98.7%</strong><span>Accuracy</span></div>
+          <div class="kpi"><strong>0.04</strong><span>Loss</span></div>
+          <div class="kpi"><strong>~2 KB</strong><span>Modelo int8</span></div>
+          <div class="kpi"><strong>195</strong><span>Params</span></div>
+          <div class="kpi"><strong>100c</strong><span>Epochs</span></div>
+        </div>
+
+        <!-- Metrics bar -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.5rem;font-weight:700;">Métricas por clase</div>
+        <div class="bar-wrap" id="vib-bars">
+          <div class="bar-row">
+            <span class="bar-label">Clase 0</span>
+            <div class="bar-bg"><div class="bar-fill" style="background:var(--green);" data-w="96.8"></div></div>
+            <span class="bar-val">96.8%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Clase 1</span>
+            <div class="bar-bg"><div class="bar-fill" style="background:var(--green);" data-w="100"></div></div>
+            <span class="bar-val">100%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Clase 2</span>
+            <div class="bar-bg"><div class="bar-fill" style="background:var(--green);" data-w="100"></div></div>
+            <span class="bar-val">100%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">F1 Score</span>
+            <div class="bar-bg"><div class="bar-fill" style="background:var(--cyan);" data-w="99"></div></div>
+            <span class="bar-val">0.99</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">ROC AUC</span>
+            <div class="bar-bg"><div class="bar-fill" style="background:var(--cyan);" data-w="100"></div></div>
+            <span class="bar-val">1.00</span>
+          </div>
+        </div>
+
+        <!-- Confusion matrix note -->
+        <div class="note-box" style="margin-top:.8rem;">
+          <strong style="color:var(--cyan);">Matriz de confusión:</strong>
+          Clase 0: 96.8% correcta, 3.2% → clase 1 (confusión menor mitigable con umbral de confianza en firmware).
+          Clases 1 y 2: 100% precisión. Weighted avg F1 = 0.99.
+        </div>
+      </div>
+    </div>
+
+    <!-- MODEL B: FOMO PCB -->
+    <div class="model-panel">
+      <div class="model-header purple-grad">
+        <div class="model-tag p">Modelo B · Nodo Cámara</div>
+        <div class="model-title">FOMO + MobileNetV2 — Visión PCB</div>
+        <div class="model-sub">ESP32-CAM + OV2640 96×96</div>
+      </div>
+      <div class="model-body">
+
+        <!-- Pipeline -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.4rem;font-weight:700;">Pipeline Edge Impulse</div>
+        <div class="pipeline">
+          <div class="pipe-box">Imagen<br><span style="color:var(--txt3);font-size:.65rem;">96×96 grayscale</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box highlight">Squash<br><span style="color:var(--txt3);font-size:.65rem;">9,216 feats</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box" style="border-color:var(--purple);color:#a78bfa;">FOMO<br><span style="color:var(--txt3);font-size:.65rem;">MobileNetV2 0.35</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box" style="border-color:var(--green);color:var(--green);">4 clases<br><span style="color:var(--txt3);font-size:.65rem;">PCB type</span></div>
+        </div>
+
+        <!-- Classes -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.4rem;font-weight:700;">Clases de salida</div>
+        <div class="classes-list">
+          <span class="cls-badge" style="background:rgba(0,212,255,.1);color:var(--cyan);border-color:rgba(0,212,255,.3);">PCB_SMD</span>
+          <span class="cls-badge" style="background:rgba(124,58,237,.1);color:#a78bfa;border-color:rgba(124,58,237,.3);">PCB_TH</span>
+          <span class="cls-badge" style="background:rgba(245,158,11,.1);color:var(--amber);border-color:rgba(245,158,11,.3);">PCB_Mixta</span>
+          <span class="cls-badge" style="background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3);">Sin_PCB</span>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-row">
+          <div class="kpi"><strong>9,216</strong><span>Features</span></div>
+          <div class="kpi"><strong>~250K</strong><span>Params</span></div>
+          <div class="kpi"><strong>~275 KB</strong><span>int8 .tflite</span></div>
+          <div class="kpi"><strong>0.005</strong><span>LR</span></div>
+        </div>
+
+        <!-- Architecture note -->
+        <div style="font-size:.75rem;color:var(--txt2);margin-bottom:.4rem;font-weight:700;">Arquitectura</div>
+        <div class="pipeline" style="flex-wrap:wrap;">
+          <div class="pipe-box" style="border-color:var(--purple);">OV2640<br><span style="font-size:.65rem;color:var(--txt3);">96×96×1</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box">MobileNetV2<br><span style="font-size:.65rem;color:var(--txt3);">alpha=0.35</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box">FOMO head<br><span style="font-size:.65rem;color:var(--txt3);">centroid det.</span></div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-box" style="border-color:var(--green);color:var(--green);">pcb_class<br><span style="font-size:.65rem;color:var(--txt3);">+ confidence</span></div>
+        </div>
+
+        <div class="note-box purple" style="margin-top:.8rem;">
+          <strong style="color:#a78bfa;">¿Por qué FOMO?</strong>
+          Más ligero que YOLO o SSD. Detecta centroides sin bounding boxes completas.
+          Data augmentation activo → robusto ante variaciones de iluminación en bancada.
+          Coherente con restricciones de memoria del ESP32-CAM (~520 KB SRAM).
+        </div>
+
+        <div class="note-box" style="margin-top:.6rem;">
+          <strong style="color:var(--cyan);">Publicación controlada:</strong>
+          El firmware publica solo si han pasado ≥10 s <em>o</em> la clase cambió.
+          Minimiza consumo de cuota en IoT Hub tier gratuito.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     5. DASHBOARD
+════════════════════════════════════════════════════════ -->
+<section id="dashboard">
+  <div class="sec-label">Sección 05</div>
+  <h2 class="sec-title">Dashboard Operativo</h2>
+  <p class="sec-desc">
+    Dashboard HTML/CSS/JS estático desplegado en Azure Static Web Apps.
+    Sin framework, sin servidor web, sin costo de cómputo adicional.
+  </p>
+
+  <div class="row reveal">
+    <div class="col">
+      <div class="cards-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="card">
+          <div class="card-icon">🌡️</div>
+          <div class="card-title">Temperatura</div>
+          <div class="card-desc">Valor actual + badge de estado (OK / ALTO / BAJO)</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💧</div>
+          <div class="card-title">Humedad</div>
+          <div class="card-desc">Valor actual + badge de estado</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📳</div>
+          <div class="card-title">Vibración</div>
+          <div class="card-desc">Estado clasificado por IA + anomaly score</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📷</div>
+          <div class="card-title">PCB Clase</div>
+          <div class="card-desc">Clase actual + barras de probabilidad por clase</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🚨</div>
+          <div class="card-title">Alerta</div>
+          <div class="card-desc">Panel de motivos de alerta activos</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <div class="card-title">Historial</div>
+          <div class="card-desc">Últimos registros + descarga CSV</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <!-- Mock dashboard preview -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:1.2rem;font-size:.78rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:.8rem;">
+          <span style="font-weight:800;color:var(--cyan);">⚙️ Monitor CNC PCB</span>
+          <span style="color:var(--green);font-size:.7rem;">● Conectado</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.8rem;">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.7rem;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:800;color:var(--cyan);">24.5°C</div>
+            <div style="color:var(--txt2);">Temperatura</div>
+            <div style="background:rgba(16,185,129,.1);color:var(--green);border-radius:20px;padding:.1rem .5rem;font-size:.65rem;margin-top:.3rem;">OK</div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.7rem;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:800;color:var(--cyan);">45.2%</div>
+            <div style="color:var(--txt2);">Humedad</div>
+            <div style="background:rgba(16,185,129,.1);color:var(--green);border-radius:20px;padding:.1rem .5rem;font-size:.65rem;margin-top:.3rem;">OK</div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.7rem;text-align:center;">
+            <div style="font-size:1rem;font-weight:800;color:var(--green);">Normal</div>
+            <div style="color:var(--txt2);">Vibración (IA)</div>
+            <div style="background:rgba(16,185,129,.1);color:var(--green);border-radius:20px;padding:.1rem .5rem;font-size:.65rem;margin-top:.3rem;">Score: 0.02</div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.7rem;text-align:center;">
+            <div style="font-size:1rem;font-weight:800;color:var(--cyan);">PCB_SMD</div>
+            <div style="color:var(--txt2);">Clase PCB (CAM)</div>
+            <div style="background:rgba(0,212,255,.1);color:var(--cyan);border-radius:20px;padding:.1rem .5rem;font-size:.65rem;margin-top:.3rem;">94% conf.</div>
+          </div>
+        </div>
+        <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:.6rem;text-align:center;color:var(--green);font-size:.75rem;font-weight:700;">
+          ✓ Sin alertas activas — Sistema en estado normal
+        </div>
+        <div style="margin-top:.8rem;font-size:.7rem;color:var(--txt3);text-align:center;">
+          Polling cada 5 s · GET /api/datos · Azure Functions
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard CTA -->
+  <div class="dashboard-banner reveal" style="margin-top:2rem;">
+    <div style="position:relative;">
+      <div style="display:inline-block;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:20px;padding:.3rem 1rem;font-size:.75rem;color:var(--green);font-weight:700;margin-bottom:1rem;">
+        ✓ SISTEMA DESPLEGADO Y EN PRODUCCIÓN
+      </div>
+      <h3>Dashboard Real Desplegado en Azure</h3>
+      <p>Accede al dashboard operativo con datos en tiempo real del sistema IoT CNC</p>
+      <a href="https://cnciotfront8890f1eb.z19.web.core.windows.net/" target="_blank" class="btn-dash">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        Abrir Dashboard Operativo
+      </a>
+      <div style="margin-top:1rem;font-size:.75rem;color:var(--txt3);">
+        https://cnciotfront8890f1eb.z19.web.core.windows.net/
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     6. ALARMAS
+════════════════════════════════════════════════════════ -->
+<section id="alarmas">
+  <div class="sec-label">Sección 06</div>
+  <h2 class="sec-title">Sistema de Alarmas</h2>
+  <p class="sec-desc">
+    Las alarmas se generan a partir del análisis de los datos de IA, no solo por umbrales crudos.
+    Integración directa con Telegram Bot API con política anti-spam.
+  </p>
+
+  <div class="thresholds reveal">
+    <div class="th-card">
+      <h4>🌡️ Temperatura</h4>
+      <div class="th-val">&lt; 15°C o &gt; 45°C</div>
+      <div style="font-size:.75rem;color:var(--txt2);margin-top:.3rem;">TEMP_MIN / TEMP_MAX</div>
+    </div>
+    <div class="th-card">
+      <h4>💧 Humedad</h4>
+      <div class="th-val">&lt; 20% o &gt; 80%</div>
+      <div style="font-size:.75rem;color:var(--txt2);margin-top:.3rem;">HUM_MIN / HUM_MAX</div>
+    </div>
+    <div class="th-card">
+      <h4>📳 Estado Vibracional</h4>
+      <div class="th-val">≠ normal / reposo</div>
+      <div style="font-size:.75rem;color:var(--txt2);margin-top:.3rem;">Estado IA → no neutral</div>
+    </div>
+    <div class="th-card">
+      <h4>📊 Anomaly Score</h4>
+      <div class="th-val">≥ 0.80</div>
+      <div style="font-size:.75rem;color:var(--txt2);margin-top:.3rem;">VIBRATION_ANOMALY_THRESHOLD</div>
+    </div>
+  </div>
+
+  <!-- Flow -->
+  <div class="alert-flow reveal">
+    <div class="af-box">Telemetría recibida<br><span style="font-size:.7rem;color:var(--txt2);">ESP32 → IoT Hub</span></div>
+    <span class="af-arrow">→</span>
+    <div class="af-box">telemetry_processor<br><span style="font-size:.7rem;color:var(--txt2);">Azure Function</span></div>
+    <span class="af-arrow">→</span>
+    <div class="af-box" style="border-color:var(--amber);">evaluate_alert()<br><span style="font-size:.7rem;color:var(--txt2);">4 condiciones</span></div>
+    <span class="af-arrow">→</span>
+    <div class="af-box" style="border-color:var(--amber);">maybe_send_telegram_alert()<br><span style="font-size:.7rem;color:var(--txt2);">cooldown 5 min</span></div>
+    <span class="af-arrow">→</span>
+    <div class="af-box" style="border-color:var(--purple);">📱 Telegram Bot<br><span style="font-size:.7rem;color:var(--txt2);">Mensaje instantáneo</span></div>
+    <span class="af-arrow">+</span>
+    <div class="af-box" style="border-color:var(--cyan);">Cosmos DB<br><span style="font-size:.7rem;color:var(--txt2);">alerts.telegram_sent</span></div>
+  </div>
+
+  <div class="note-box">
+    <strong style="color:var(--cyan);">Política anti-spam:</strong>
+    Envío inmediato en transición NORMAL → FALLO. Supresión de repeticiones hasta expirar cooldown (5 min, configurable).
+    Recordatorio automático si la condición persiste. Al recuperarse, el estado se limpia en memoria y el próximo fallo
+    vuelve a disparar alerta inmediata. Mecanismo protegido con <code>threading.Lock</code>.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     7. CUMPLIMIENTO DE REQUERIMIENTOS
+════════════════════════════════════════════════════════ -->
+<section id="requerimientos">
+  <div class="sec-label">Sección 07</div>
+  <h2 class="sec-title">Cumplimiento de Requerimientos del Profesor</h2>
+  <p class="sec-desc">
+    Mapa completo de cada requerimiento con la evidencia concreta en la solución y el componente que lo implementa.
+  </p>
+
+  <div class="reveal" style="overflow-x:auto;">
+    <table class="req-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Requerimiento del Profesor</th>
+          <th>✓</th>
+          <th>Evidencia en la Solución</th>
+          <th>Componente</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="req-num">R1</td>
+          <td>Monitorear temperatura, humedad, clasificación de movimiento y de imágenes</td>
+          <td class="check">✓</td>
+          <td>DHT22 (temp+hum), MPU-6050+MLP (movimiento), OV2640+FOMO (imágenes)</td>
+          <td><span class="comp-tag ct-fw">Firmware</span> <span class="comp-tag ct-ai">Edge AI</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R2</td>
+          <td>Conectar sensores a GPIO del ESP32 (alimentación, tierra, señal)</td>
+          <td class="check">✓</td>
+          <td>DHT22→GPIO4, MPU-6050→I²C SDA/SCL (GPIO21/22), VCC 3.3V, GND</td>
+          <td><span class="comp-tag ct-fw">Firmware</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R3</td>
+          <td>Instalar librerías necesarias para sensores</td>
+          <td class="check">✓</td>
+          <td>Adafruit DHT, Adafruit MPU6050, ArduinoJson, PubSubClient, Edge Impulse SDK (.zip)</td>
+          <td><span class="comp-tag ct-fw">Firmware</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R4</td>
+          <td>Verificar valores mediante monitor serial</td>
+          <td class="check">✓</td>
+          <td>Serial.print() a 115200 baud imprime temp, hum, accel XYZ y clase predicha antes de publicar</td>
+          <td><span class="comp-tag ct-fw">Firmware</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R5</td>
+          <td>Implementar modelos de IA en el dispositivo Edge</td>
+          <td class="check">✓</td>
+          <td>MLP int8 ~2KB para vibración (ESP32), FOMO MobileNetV2 ~275KB para visión (ESP32-CAM)</td>
+          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Firmware</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R6</td>
+          <td>Conectar el ESP32 a una red WiFi</td>
+          <td class="check">✓</td>
+          <td>WiFi.begin(ssid, pass), reconexión automática, MQTTS TLS 1.2 puerto 8883 a Azure IoT Hub</td>
+          <td><span class="comp-tag ct-fw">Firmware</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R7</td>
+          <td>Almacenar los datos en una base de datos</td>
+          <td class="check">✓</td>
+          <td>Cosmos DB NoSQL (CNCMonitor/Telemetry), persistencia via Azure Function serverless con upsert</td>
+          <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R8a</td>
+          <td>Dashboard — datos medidos por sensores</td>
+          <td class="check">✓</td>
+          <td>Temperatura °C, humedad %, vibración XYZ mostrados en tiempo real con polling cada 5 s</td>
+          <td><span class="comp-tag ct-fw">Frontend</span> <span class="comp-tag ct-bk">Backend</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R8b</td>
+          <td>Dashboard — clasificación IA desde temperatura/humedad + acelerómetro/giroscopio</td>
+          <td class="check">✓</td>
+          <td>Estado vibracional (clase 0/1/2) y anomaly score publicados y visualizados en dashboard</td>
+          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R8c</td>
+          <td>Dashboard — clasificación de imágenes</td>
+          <td class="check">✓</td>
+          <td>Clase PCB (PCB_SMD / PCB_TH / PCB_Mixta / Sin_PCB) con barras de probabilidad en dashboard</td>
+          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
+        </tr>
+        <tr>
+          <td class="req-num">R9</td>
+          <td>Generar alarmas a partir de los datos del modelo de IA (Telegram/SMS/etc.)</td>
+          <td class="check">✓</td>
+          <td>evaluate_alert() + Telegram Bot API, disparado por anomaly score ≥ 0.80 o estado vibracional anómalo</td>
+          <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Evaluation criteria -->
+  <div class="sec-label" style="margin-top:2.5rem;">Criterios de evaluación</div>
+  <h3 style="font-size:1.1rem;margin-bottom:1rem;">Cómo la solución cumple cada criterio</h3>
+
+  <div class="eval-grid reveal">
+    <div class="eval-card">
+      <div class="eval-icon">🧠</div>
+      <div class="eval-cat">Funcionalidad</div>
+      <div class="eval-title">IA en Edge + Datos en DB</div>
+      <ul class="eval-items">
+        <li>MLP int8 ejecuta en ESP32 sin conexión</li>
+        <li>FOMO ejecuta en ESP32-CAM sin conexión</li>
+        <li>Resultados persisten en Cosmos DB</li>
+        <li>Verificación posible vía GET /api/datos</li>
+      </ul>
+    </div>
+    <div class="eval-card">
+      <div class="eval-icon">📡</div>
+      <div class="eval-cat">Comunicación</div>
+      <div class="eval-title">Conexión estable MQTT/TLS</div>
+      <ul class="eval-items">
+        <li>MQTTS 8883 con TLS 1.2</li>
+        <li>Reconexión automática en firmware</li>
+        <li>Publicación periódica configurable</li>
+        <li>Dos nodos independientes activos</li>
+      </ul>
+    </div>
+    <div class="eval-card">
+      <div class="eval-icon">🔌</div>
+      <div class="eval-cat">Bróker / Servidor</div>
+      <div class="eval-title">Azure IoT Hub recibe datos</div>
+      <ul class="eval-items">
+        <li>Azure IoT Hub actúa como bróker MQTT</li>
+        <li>EventHub trigger activa Function</li>
+        <li>Telemetría de ambos nodos procesada</li>
+        <li>Dispatch automático por tipo de payload</li>
+      </ul>
+    </div>
+    <div class="eval-card">
+      <div class="eval-icon">📊</div>
+      <div class="eval-cat">Visualización</div>
+      <div class="eval-title">Dashboard completo</div>
+      <ul class="eval-items">
+        <li>Todos los sensores visibles en tiempo real</li>
+        <li>Clasificación vibración + anomaly score</li>
+        <li>Clasificación PCB con probabilidades</li>
+        <li>Historial + descarga CSV</li>
+      </ul>
+    </div>
+    <div class="eval-card">
+      <div class="eval-icon">🚨</div>
+      <div class="eval-cat">Alarmas</div>
+      <div class="eval-title">Alertas por IA vía Telegram</div>
+      <ul class="eval-items">
+        <li>Disparadas por anomaly score IA</li>
+        <li>Disparadas por estado vibracional anómalo</li>
+        <li>Telegram Bot API integrado</li>
+        <li>Anti-spam cooldown configurable</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════════════════════════════════════
+     8. CONCLUSIONES
+════════════════════════════════════════════════════════ -->
+<section id="conclusiones">
+  <div class="sec-label">Sección 08</div>
+  <h2 class="sec-title">Fortalezas y Conclusiones</h2>
+
+  <div class="concl-grid reveal">
+    <div class="concl-card">
+      <div class="concl-icon">⚡</div>
+      <div class="concl-title">Edge AI Real</div>
+      <div class="concl-text">Inferencia completamente en dispositivo. Sin latencia de red para decisiones críticas. MLP en 2 KB, FOMO en ~275 KB.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">☁️</div>
+      <div class="concl-title">Serverless</div>
+      <div class="concl-text">Azure Functions + Cosmos DB Serverless. Pago por uso real. Escalado automático. Sin administración de servidores.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">💰</div>
+      <div class="concl-title">Bajo Costo</div>
+      <div class="concl-text">Hardware: ESP32 (~5 USD) + ESP32-CAM (~7 USD). Cloud: tier gratuito IoT Hub + Cosmos DB Serverless. Frontend: Azure Static.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">🔧</div>
+      <div class="concl-title">Modular</div>
+      <div class="concl-text">Firmware, backend y frontend completamente independientes. Nuevos sensores o nodos se integran sin cambiar el backend.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">📈</div>
+      <div class="concl-title">Escalable</div>
+      <div class="concl-text">IoT Hub soporta millones de dispositivos. Cosmos DB escala horizontalmente. Functions escala en paralelo automáticamente.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">🎓</div>
+      <div class="concl-title">Reproducible</div>
+      <div class="concl-text">Scripts Bash de despliegue automatizados. Deploy completo desde Azure Cloud Shell en pasos documentados.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">🏭</div>
+      <div class="concl-title">Industrial</div>
+      <div class="concl-text">Ruta de manufactura PCB determinada automáticamente. Monitoreo preventivo real. Alertas accionables en producción.</div>
+    </div>
+    <div class="concl-card">
+      <div class="concl-icon">🔒</div>
+      <div class="concl-title">Seguro</div>
+      <div class="concl-text">TLS 1.2 en MQTTS. Credenciales en variables de entorno. Certificado CA Azure. Secrets fuera del repositorio.</div>
+    </div>
+  </div>
+
+  <!-- Final CTA -->
+  <div class="dashboard-banner reveal" style="margin-top:3rem;">
+    <div style="position:relative;">
+      <h3 style="font-size:1.8rem;">Sistema completo y desplegado en Azure</h3>
+      <p style="max-width:560px;margin:0 auto 1.5rem;">
+        ESP32 + ESP32-CAM + Edge Impulse + Azure IoT Hub + Azure Functions + Cosmos DB + Telegram + Dashboard
+      </p>
+      <a href="https://cnciotfront8890f1eb.z19.web.core.windows.net/" target="_blank" class="btn-dash" style="font-size:1rem;padding:1rem 2.5rem;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        Ver Dashboard en Producción
+      </a>
+    </div>
+  </div>
+</section>
+
+</div><!-- /.page -->
+
+<footer>
+  <p>
+    IoT CNC PCB Monitor — Exposición Académica ·
+    <a href="https://github.com/Deivs117/IoT_CNC_Monitoring" target="_blank">GitHub</a> ·
+    <a href="https://cnciotfront8890f1eb.z19.web.core.windows.net/" target="_blank">Dashboard Operativo</a>
+  </p>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════ -->
+<script>
+/* ── Scroll reveal ── */
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      revealObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+/* ── Bar chart animation ── */
+const barObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.bar-fill[data-w]').forEach(bar => {
+        bar.style.width = bar.dataset.w + '%';
+      });
+      barObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('.bar-wrap').forEach(el => barObserver.observe(el));
+
+/* ── Timeline toggle ── */
+function toggleStep(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('span:last-child');
+  body.classList.toggle('open');
+  if (arrow) arrow.textContent = body.classList.contains('open') ? '▴' : '▾';
+}
+
+/* ── Architecture tooltip ── */
+const archData = {
+  esp32main: {
+    title: 'ESP32 Principal — cnc_fresadora_01',
+    items: [
+      'Sensores: DHT22 (temperatura/humedad) + MPU-6050 (acelerómetro/giroscopio)',
+      'Modelo: MLP 8→16→3 cuantizado int8 (~2 KB)',
+      'Firmware: C++ / Arduino IDE',
+      'Protocolo: MQTTS 8883 con TLS 1.2',
+      'Publica: temp, hum, vibration_status, anomaly_score',
+      'Justificación: ESP32 tiene suficiente SRAM para MLP tabular pequeño'
+    ]
+  },
+  esp32cam: {
+    title: 'ESP32-CAM — cnc_camera_01',
+    items: [
+      'Sensor: cámara OV2640 (96×96, grayscale)',
+      'Modelo: FOMO + MobileNetV2 0.35 cuantizado int8 (~275 KB)',
+      'Firmware: C++ / Arduino IDE + Edge Impulse SDK',
+      'Protocolo: MQTTS 8883 con TLS 1.2',
+      'Publica: pcb_class, confidence, probabilities, inference_ms',
+      'Justificación: único ESP con cámara integrada en el ecosistema Arduino'
+    ]
+  },
+  iothub: {
+    title: 'Azure IoT Hub',
+    items: [
+      'Bróker MQTT administrado en la nube',
+      'Autenticación por certificado x.509 / SAS token',
+      'Recibe telemetría de ambos nodos',
+      'Dispara EventHub trigger hacia Azure Functions',
+      'Justificación: managed service, sin infraestructura propia, tier F1 gratuito'
+    ]
+  },
+  functions: {
+    title: 'Azure Functions (Python Serverless)',
+    items: [
+      'telemetry_processor: EventHub trigger → Cosmos DB',
+      'get_datos: GET /api/datos → JSON último registro',
+      'descargar_csv: GET /api/datos/csv → descarga',
+      'control_actuador: POST /api/actuador (Direct Method)',
+      'ingestar_camara: POST /api/camara (canal HTTP debug)',
+      'Justificación: serverless, pago por invocación, sin servidor propio'
+    ]
+  },
+  cosmos: {
+    title: 'Cosmos DB — CNCMonitor/Telemetry',
+    items: [
+      'NoSQL document store (API Core SQL)',
+      'Modo: Serverless (pago por RU consumidas)',
+      'Ambos tipos de telemetría en el mismo contenedor',
+      'Distingue por device_id: cnc_fresadora_01 vs cnc_camera_01',
+      'Operación: upsert con ID único por evento',
+      'Justificación: schema flexible para payload heterogéneo'
+    ]
+  },
+  dashboard: {
+    title: 'Dashboard — Azure Static Web',
+    items: [
+      'HTML/CSS/JS puro, sin framework',
+      'Hospedado en Azure Static Website (Storage)',
+      'Polling cada 5 s a GET /api/datos',
+      'Muestra temperatura, humedad, vibración, PCB clase',
+      'Panel de probabilidades PCB por clase',
+      'Justificación: sin costo adicional de cómputo, CDN global'
+    ]
+  },
+  telegram: {
+    title: 'Telegram Bot API — Alertas',
+    items: [
+      'Alertas por temperatura, humedad, vibración anómala',
+      'Disparadas por evaluate_alert() en Python',
+      'Umbral anomaly score: ≥ 0.80',
+      'Anti-spam: cooldown configurable (por defecto 5 min)',
+      'Estado de alerta persistido en Cosmos DB',
+      'Justificación: canal gratuito, inmediato, sin configuración SMTP'
+    ]
+  }
+};
+
+const svg = document.getElementById('arch-svg');
+const tooltip = document.getElementById('arch-tooltip');
+let tooltipVisible = false;
+
+svg.querySelectorAll('.arch-node').forEach(node => {
+  const id = node.dataset.id;
+  if (!archData[id]) return;
+
+  node.addEventListener('mouseenter', (e) => {
+    const data = archData[id];
+    tooltip.innerHTML = `<strong>${data.title}</strong><ul>${data.items.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+    tooltip.style.display = 'block';
+    tooltip.style.opacity = '1';
+    positionTooltip(e);
+  });
+
+  node.addEventListener('mousemove', positionTooltip);
+
+  node.addEventListener('mouseleave', () => {
+    tooltip.style.opacity = '0';
+    setTimeout(() => { if (tooltip.style.opacity === '0') tooltip.style.display = 'none'; }, 150);
+  });
+
+  node.addEventListener('click', () => {
+    const data = archData[id];
+    tooltip.innerHTML = `<strong>${data.title}</strong><ul>${data.items.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+    tooltip.style.display = 'block';
+    tooltip.style.opacity = '1';
+  });
+});
+
+function positionTooltip(e) {
+  const wrap = document.querySelector('.arch-wrap');
+  const rect = wrap.getBoundingClientRect();
+  let x = e.clientX - rect.left + 12;
+  let y = e.clientY - rect.top + 12;
+  // Keep in bounds
+  if (x + 270 > wrap.offsetWidth) x = x - 280;
+  if (y + 220 > wrap.offsetHeight) y = y - 180;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top  = y + 'px';
+}
+
+// Close tooltip on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.arch-node') && !e.target.closest('#arch-tooltip')) {
+    tooltip.style.opacity = '0';
+    setTimeout(() => { if (tooltip.style.opacity === '0') tooltip.style.display = 'none'; }, 150);
+  }
+});
+
+/* ── Active nav link on scroll ── */
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-links a');
+
+const sectionObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      navLinks.forEach(a => {
+        a.style.color = a.getAttribute('href') === '#' + id ? 'var(--cyan)' : '';
+        a.style.background = a.getAttribute('href') === '#' + id ? 'rgba(0,212,255,.08)' : '';
+      });
+    }
+  });
+}, { threshold: 0.4 });
+
+sections.forEach(s => sectionObserver.observe(s));
+</script>
+</body>
+</html>

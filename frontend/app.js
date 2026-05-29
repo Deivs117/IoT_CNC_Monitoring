@@ -38,6 +38,11 @@ const PCB_CLASS_ICONS = {
   Sin_PCB:   "⬜",
 };
 
+// ── Instancias de Chart.js (inicializadas en DOMContentLoaded) ───────────────
+let chartTemp = null;
+let chartHum  = null;
+let chartVib  = null;
+
 let refreshTimer = null;
 
 // ── Último estado válido (retención ante payloads parciales) ─────────────────
@@ -66,6 +71,7 @@ let lastPushedTimestamp = 0; // Evita duplicados en cada ciclo de polling
 // Inicio
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  initCharts();
   fetchData();
   fetchCameraData();
   refreshTimer = setInterval(fetchData, REFRESH_INTERVAL_MS);
@@ -136,6 +142,7 @@ function renderMetrics(data) {
 
   // Actualizar buffer de series de tiempo con todos los documentos recibidos
   pushToTimeSeries(data);
+  updateCharts();
 
   const latest      = data[0];
   const sensors     = latest.sensors     || {};
@@ -413,7 +420,10 @@ function pushToTimeSeries(data) {
   const now    = Date.now();
   const cutoff = now - TIME_WINDOW_MS;
 
-  data.forEach((item) => {
+  // Solo procesar documentos del nodo principal (ignorar cámara)
+  const mainDocs = data.filter(item => item.device_type !== "camera");
+
+  mainDocs.forEach((item) => {
     const ts = item.timestamp ? item.timestamp * 1000 : null;
     if (!ts || ts <= lastPushedTimestamp || ts < cutoff) return;
 
@@ -432,8 +442,8 @@ function pushToTimeSeries(data) {
     if (score !== null && !isNaN(score)) timeSeriesBuffer.vibration_anomaly_score.push({ ts, value: score });
   });
 
-  // Actualizar el último timestamp procesado para evitar duplicados
-  const maxTs = data.reduce(
+  // Avanzar lastPushedTimestamp solo con timestamps del nodo principal
+  const maxTs = mainDocs.reduce(
     (m, d) => Math.max(m, d.timestamp ? d.timestamp * 1000 : 0), 0
   );
   if (maxTs > lastPushedTimestamp) lastPushedTimestamp = maxTs;
@@ -446,7 +456,8 @@ function pushToTimeSeries(data) {
 
 /**
  * Expande/colapsa el panel de series de tiempo.
- * La implementación de las gráficas se incorporará en una próxima versión.
+ * Al expandir por primera vez, fuerza un update de las gráficas para que
+ * Chart.js calcule correctamente el tamaño del canvas.
  */
 function toggleTimeSeries() {
   const panel  = document.getElementById("timeseries-panel");
@@ -455,6 +466,149 @@ function toggleTimeSeries() {
   const hidden = panel.classList.toggle("hidden");
   toggle.setAttribute("aria-expanded", String(!hidden));
   icon.textContent = hidden ? "▼" : "▲";
+
+  // Forzar resize de Chart.js al hacerse visible (canvas tenía size 0 mientras oculto)
+  if (!hidden) {
+    [chartTemp, chartHum, chartVib].forEach(c => c && c.resize());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inicialización de las tres gráficas Chart.js
+// ---------------------------------------------------------------------------
+function initCharts() {
+  const darkGrid  = "#2d3148";
+  const mutedTick = "#8a8fa8";
+
+  const commonScales = {
+    x: {
+      type: "time",
+      time: {
+        unit: "minute",
+        displayFormats: { minute: "HH:mm", second: "HH:mm:ss" },
+        tooltipFormat: "HH:mm:ss",
+      },
+      ticks: { color: mutedTick, maxRotation: 0, font: { size: 10 }, maxTicksLimit: 6 },
+      grid:  { color: darkGrid },
+    },
+    y: {
+      ticks: { color: mutedTick, font: { size: 10 } },
+      grid:  { color: darkGrid },
+    },
+  };
+
+  const commonPlugins = {
+    legend: { display: false },
+    tooltip: { mode: "index", intersect: false },
+  };
+
+  chartTemp = new Chart(document.getElementById("canvas-temp"), {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Temperatura (°C)",
+        data: [],
+        borderColor: "#e74c3c",
+        backgroundColor: "rgba(231,76,60,0.12)",
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: commonPlugins,
+      scales: {
+        x: commonScales.x,
+        y: { ...commonScales.y, suggestedMin: 0, suggestedMax: 60 },
+      },
+    },
+  });
+
+  chartHum = new Chart(document.getElementById("canvas-hum"), {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Humedad (%)",
+        data: [],
+        borderColor: "#3b82f6",
+        backgroundColor: "rgba(59,130,246,0.12)",
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: commonPlugins,
+      scales: {
+        x: commonScales.x,
+        y: { ...commonScales.y, suggestedMin: 0, suggestedMax: 100 },
+      },
+    },
+  });
+
+  chartVib = new Chart(document.getElementById("canvas-vib"), {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Score Anomalía Vibracional",
+        data: [],
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245,158,11,0.12)",
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: commonPlugins,
+      scales: {
+        x: commonScales.x,
+        y: { ...commonScales.y, min: 0, max: 1 },
+      },
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Actualización de las gráficas con los datos del buffer de series de tiempo
+// ---------------------------------------------------------------------------
+function updateCharts() {
+  if (!chartTemp || !chartHum || !chartVib) return;
+
+  const now    = Date.now();
+  const cutoff = now - TIME_WINDOW_MS;
+
+  const toPoints = (buffer) =>
+    buffer
+      .filter(p => p.ts >= cutoff)
+      .sort((a, b) => a.ts - b.ts)
+      .map(p => ({ x: p.ts, y: p.value }));
+
+  chartTemp.data.datasets[0].data = toPoints(timeSeriesBuffer.temperature);
+  chartHum.data.datasets[0].data  = toPoints(timeSeriesBuffer.humidity);
+  chartVib.data.datasets[0].data  = toPoints(timeSeriesBuffer.vibration_anomaly_score);
+
+  // Mantener el eje X estrictamente dentro de los últimos 5 minutos
+  [chartTemp, chartHum, chartVib].forEach(chart => {
+    chart.options.scales.x.min = cutoff;
+    chart.options.scales.x.max = now;
+    chart.update("none"); // sin animación para actualización incremental
+  });
 }
 
 // ---------------------------------------------------------------------------

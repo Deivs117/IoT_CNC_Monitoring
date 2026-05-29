@@ -11,7 +11,7 @@ import azure.functions as func
 from azure.cosmos import CosmosClient
 from requests import RequestException
 
-from shared_code.alerts import compose_telegram_message, evaluate_alert, send_telegram_alert
+from shared_code.alerts import compose_telegram_message, evaluate_alert, maybe_send_telegram_alert
 
 logger = logging.getLogger("telemetry_processor")
 RAW_EVENT_PREVIEW_LENGTH = 500
@@ -97,17 +97,14 @@ def _build_vibration_document(payload: Dict[str, Any]) -> Dict[str, Any]:
         "raw_payload": payload,
     }
 
-    if reasons:
-        message = compose_telegram_message(device_id=device_id, timestamp=timestamp, reasons=reasons)
-        try:
-            sent = send_telegram_alert(message)
-            document["alerts"]["telegram_sent"] = sent
-        except RequestException as exc:  # pragma: no cover - runtime observability path
-            logger.exception("No fue posible enviar alerta por Telegram: %s", exc)
-            document["alerts"]["telegram_sent"] = False
-            document["alerts"]["telegram_error"] = str(exc)
-    else:
+    message = compose_telegram_message(device_id=device_id, timestamp=timestamp, reasons=reasons) if reasons else ""
+    try:
+        sent = maybe_send_telegram_alert(device_id=device_id, message=message, has_alert=bool(reasons))
+        document["alerts"]["telegram_sent"] = sent
+    except RequestException as exc:  # pragma: no cover - runtime observability path
+        logger.exception("No fue posible enviar alerta por Telegram: %s", exc)
         document["alerts"]["telegram_sent"] = False
+        document["alerts"]["telegram_error"] = str(exc)
 
     return document
 

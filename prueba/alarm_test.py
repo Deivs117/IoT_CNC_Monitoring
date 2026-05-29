@@ -1,10 +1,16 @@
+import os
+
 import requests
 
 # ---------------------------------
 # CONFIGURACION
 # ---------------------------------
-TELEGRAM_TOKEN = "8866789017:AAHXdeCudp_EKhJd7hR572kaLLY2C-VveLw"  # Token del bot
-TELEGRAM_CHAT_ID = "8291531096"  # Chat ID
+# Leer credenciales desde variables de entorno, nunca hardcodeadas.
+# Exporta antes de ejecutar:
+#   export TELEGRAM_BOT_TOKEN="tu_token"
+#   export TELEGRAM_CHAT_ID="tu_chat_id"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ---------------------------------
 # DATOS SIMULADOS DEL MODELO DE IA
@@ -30,6 +36,9 @@ UMBRALES = {
 # FUNCION: Enviar mensaje por Telegram
 # ---------------------------------
 def enviar_telegram(mensaje: str):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no están configurados. Exporta las variables de entorno.")
+        return None
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,

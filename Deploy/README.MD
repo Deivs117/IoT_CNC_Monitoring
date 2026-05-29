@@ -464,7 +464,7 @@ El script mostrará:
   Introduce TELEGRAM_CHAT_ID: 123456789
 
   ¿Guardar credenciales en '/home/user/iot_cnc_secrets.env' para próximas ejecuciones? [s/N]: s
-  ✅ Guardado en '/home/user/iot_cnc_secrets.env' (permisos 600).
+  [OK] Guardado en '/home/user/iot_cnc_secrets.env' (permisos 600).
 ```
 
 Después continúa automáticamente con infraestructura, backend y frontend.
@@ -501,14 +501,14 @@ Al terminar `deploy.sh`, el resumen final muestra si Telegram quedó configurado
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║           ✅  Despliegue completado                      ║
+║           Despliegue completado                         ║
 ╠══════════════════════════════════════════════════════════╣
 ║  IoT Hub:      cnc-iot-hub                              ║
 ║  Cosmos DB:    cnc-iot-cosmos                           ║
 ║  Function App: cnc-iot-func                             ║
 ║  API URL:      https://cnc-iot-func.azurewebsites.net   ║
 ║  Dashboard:    https://cnciotfront...web.core.windows.net║
-║  Telegram:     ✅ credenciales cargadas                 ║
+║  Telegram:     credenciales cargadas                    ║
 ║  Tiempo total: 245s                                     ║
 ╚══════════════════════════════════════════════════════════╝
 ```

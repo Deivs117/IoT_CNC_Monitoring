@@ -416,11 +416,147 @@ El valor por defecto es `300` (5 minutos).
 
 ---
 
-# 10. Método recomendado para exportar secretos sin perderlos
+# 10. Prompt interactivo de Telegram — nuevo flujo automático
+
+A partir de la versión actual de los scripts, **no es necesario exportar manualmente** las variables de Telegram antes de desplegar.
+
+`deploy.sh` y `02_backend.sh` incluyen el helper `_shared_env.sh` que gestiona todo el proceso automáticamente.
+
+## Flujo automático
+
+```
+bash deploy.sh
+   │
+   ├─ ¿Existe ~/iot_cnc_secrets.env? ──Sí──▶ carga valores automáticamente
+   │                                          │
+   │                                          ├─ ¿Faltan variables? ──No──▶ continúa sin preguntar
+   │                                          └─ ¿Faltan variables? ──Sí──▶ pide las que falten
+   │
+   └─ No existe archivo ──▶ pide TELEGRAM_BOT_TOKEN (oculto) y TELEGRAM_CHAT_ID
+                             │
+                             └─ ¿Guardar en ~/iot_cnc_secrets.env? [s/N]
+                                  │
+                                  Sí ──▶ guarda con permisos 600
+                                  No ──▶ disponible solo esta sesión
+```
+
+## Primer despliegue (sin archivo de secretos)
+
+```bash
+cd ~/IoT_CNC_Monitoring/Deploy
+bash deploy.sh
+```
+
+El script mostrará:
+
+```
+──────────────────────────────────────────────────────
+  Configuración de Telegram para alertas de CNC
+──────────────────────────────────────────────────────
+  No se encontró '/home/user/iot_cnc_secrets.env'.
+  Se pedirán las credenciales de Telegram.
+
+  Si no tienes un bot de Telegram configurado, presiona
+  Enter dos veces para omitir (las alertas quedarán deshabilitadas).
+──────────────────────────────────────────────────────
+
+  Introduce TELEGRAM_BOT_TOKEN: ****  ← sin eco en pantalla
+  Introduce TELEGRAM_CHAT_ID: 123456789
+
+  ¿Guardar credenciales en '/home/user/iot_cnc_secrets.env' para próximas ejecuciones? [s/N]: s
+  ✅ Guardado en '/home/user/iot_cnc_secrets.env' (permisos 600).
+```
+
+Después continúa automáticamente con infraestructura, backend y frontend.
+
+## Re-despliegue (con archivo de secretos ya guardado)
+
+```bash
+bash deploy.sh
+```
+
+No se vuelven a pedir las credenciales — se cargan automáticamente desde `~/iot_cnc_secrets.env`.
+
+## Ejecución parcial
+
+```bash
+bash deploy.sh --only-backend
+bash deploy.sh --no-infra
+bash deploy.sh --only-front
+```
+
+El prompt de Telegram aparece igual antes de ejecutar cualquier fase.
+
+## Ejecución de `02_backend.sh` por separado
+
+```bash
+bash 02_backend.sh
+```
+
+El helper `_shared_env.sh` también está incluido en `02_backend.sh`, por lo que el comportamiento es idéntico: carga desde archivo si existe, o pide interactivamente si faltan.
+
+## Resumen al finalizar
+
+Al terminar `deploy.sh`, el resumen final muestra si Telegram quedó configurado:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║           ✅  Despliegue completado                      ║
+╠══════════════════════════════════════════════════════════╣
+║  IoT Hub:      cnc-iot-hub                              ║
+║  Cosmos DB:    cnc-iot-cosmos                           ║
+║  Function App: cnc-iot-func                             ║
+║  API URL:      https://cnc-iot-func.azurewebsites.net   ║
+║  Dashboard:    https://cnciotfront...web.core.windows.net║
+║  Telegram:     ✅ credenciales cargadas                 ║
+║  Tiempo total: 245s                                     ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+---
+
+# 11. Cómo actualizar o cambiar las credenciales de Telegram
+
+## Opción A: editar manualmente el archivo
+
+```bash
+nano ~/iot_cnc_secrets.env
+```
+
+Modifica las líneas correspondientes y guarda. La próxima vez que ejecutes `deploy.sh` o `02_backend.sh` se usarán los nuevos valores.
+
+## Opción B: borrar el archivo y que el prompt lo recree
+
+```bash
+rm ~/iot_cnc_secrets.env
+bash deploy.sh
+# el script pedirá nuevamente las credenciales
+```
+
+## Opción C: actualizar solo los App Settings en Azure sin redesplegar
+
+```bash
+source ~/iot_cnc_secrets.env
+source ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
+
+az functionapp config appsettings set \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --settings \
+    "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+    "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}"
+```
+
+---
+
+# 12. Método recomendado para exportar secretos sin perderlos
 
 La mejor práctica en Azure Cloud Shell es usar un archivo persistente con permisos restringidos.
 
-## Paso 1: crear un archivo privado de secretos
+**El script `deploy.sh` lo crea automáticamente** si lo aceptas en el prompt (ver sección 10).  
+Si prefieres crearlo manualmente:
+
+## Crear el archivo manualmente
 
 ```bash
 cat > ~/iot_cnc_secrets.env <<'EOF'
@@ -466,7 +602,7 @@ echo "$FUNC_APP_NAME"
 
 ---
 
-# 11. Cómo evitar perder variables si se desconecta la terminal
+# 13. Cómo evitar perder variables si se desconecta la terminal
 
 Si Azure Cloud Shell se desconecta, las variables cargadas con `export` desaparecen de la sesión.
 
@@ -481,7 +617,7 @@ Esto restaurará tus variables de entorno.
 
 ---
 
-# 12. Cómo cargar automáticamente los secretos al abrir Cloud Shell
+# 14. Cómo cargar automáticamente los secretos al abrir Cloud Shell
 
 Si quieres automatizar la carga en futuras sesiones, puedes agregar esto a `~/.bashrc`:
 
@@ -508,7 +644,7 @@ Haz esto solo si:
 
 ---
 
-# 13. Archivo `infra_outputs.env` y por qué es tan importante
+# 15. Archivo `infra_outputs.env` y por qué es tan importante
 
 El script `01_infraestructura.sh` genera el archivo:
 
@@ -540,7 +676,7 @@ chmod 600 Deploy/infra_outputs.env
 
 ---
 
-# 14. Respaldo recomendado de `infra_outputs.env`
+# 16. Respaldo recomendado de `infra_outputs.env`
 
 Después de ejecutar `01_infraestructura.sh` o `deploy.sh`, crea una copia adicional:
 
@@ -565,11 +701,11 @@ chmod 600 ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
 
 ---
 
-# 15. Uso detallado de cada script
+# 17. Uso detallado de cada script
 
 ---
 
-# 15.1 `01_infraestructura.sh`
+# 17.1 `01_infraestructura.sh`
 
 ## Qué hace
 
@@ -646,7 +782,7 @@ cp Deploy/infra_outputs.env ~/infra_outputs.env.backup
 
 ---
 
-# 15.2 `02_backend.sh`
+# 17.2 `02_backend.sh`
 
 ## Qué hace
 
@@ -706,7 +842,7 @@ grep FUNC_KEY Deploy/infra_outputs.env
 
 ---
 
-# 15.3 `03_frontend_hosting.sh`
+# 17.3 `03_frontend_hosting.sh`
 
 ## Qué hace
 
@@ -760,7 +896,7 @@ https://<storage-account>.z13.web.core.windows.net
 
 ---
 
-# 15.4 `04_cleanup.sh`
+# 17.4 `04_cleanup.sh`
 
 ## Qué hace
 
@@ -805,7 +941,7 @@ chmod 600 ~/infra_outputs.env.pre_cleanup.backup
 
 ---
 
-# 15.5 `deploy.sh`
+# 17.5 `deploy.sh`
 
 ## Qué hace
 
@@ -866,7 +1002,7 @@ bash deploy.sh --no-front
 
 ---
 
-# 16. Flujo recomendado completo desde Azure Cloud Shell
+# 18. Flujo recomendado completo desde Azure Cloud Shell
 
 ## Paso 1: abrir Cloud Shell
 Abre Azure Cloud Shell en modo Bash.
@@ -879,40 +1015,24 @@ git clone https://github.com/Deivs117/IoT_CNC_Monitoring.git
 cd IoT_CNC_Monitoring
 ```
 
-## Paso 3: crear archivo persistente de secretos
-
-```bash
-cat > ~/iot_cnc_secrets.env <<'EOF'
-export TELEGRAM_BOT_TOKEN="TU_TOKEN"
-export TELEGRAM_CHAT_ID="TU_CHAT_ID"
-export RG_NAME="rg-cnc-iot"
-export LOCATION="eastus"
-export IOT_HUB_NAME="cnc-iot-hub"
-export IOT_DEVICE_ID="cnc_fresadora_01"
-export COSMOS_ACCOUNT="cnc-iot-cosmos"
-export FUNC_APP_NAME="cnc-iot-func"
-export INSTANCE_SUFFIX="deivid"
-EOF
-
-chmod 600 ~/iot_cnc_secrets.env
-source ~/iot_cnc_secrets.env
-```
-
-## Paso 4: ejecutar despliegue completo
+## Paso 3: ejecutar despliegue completo
 
 ```bash
 cd ~/IoT_CNC_Monitoring/Deploy
 bash deploy.sh
 ```
 
-## Paso 5: respaldar outputs
+El script pedirá las credenciales de Telegram si no existe `~/iot_cnc_secrets.env`,
+y ofrecerá guardarlas automáticamente para próximas ejecuciones.
+
+## Paso 4: respaldar outputs
 
 ```bash
 cp infra_outputs.env ~/infra_outputs.env.backup
 chmod 600 ~/infra_outputs.env.backup
 ```
 
-## Paso 6: si se desconecta la terminal
+## Paso 5: si se desconecta la terminal
 
 Cuando vuelvas a abrir Cloud Shell:
 
@@ -931,7 +1051,7 @@ chmod 600 ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
 
 ---
 
-# 17. Uso de `infra_outputs.env.template`
+# 19. Uso de `infra_outputs.env.template`
 
 El archivo:
 
@@ -957,7 +1077,7 @@ En el flujo normal **no necesitas rellenarlo manualmente**, porque:
 
 ---
 
-# 18. Persistencia recomendada de secretos y variables
+# 20. Persistencia recomendada de secretos y variables
 
 ## Archivos que conviene conservar
 
@@ -993,7 +1113,7 @@ chmod 600 ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
 
 ---
 
-# 19. Buenas prácticas de seguridad
+# 21. Buenas prácticas de seguridad
 
 1. No subas nunca a Git:
    - `Deploy/infra_outputs.env`
@@ -1010,7 +1130,7 @@ chmod 600 ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
 
 ---
 
-# 20. Comandos rápidos útiles
+# 22. Comandos rápidos útiles
 
 ## Recargar secretos
 ```bash
@@ -1026,14 +1146,12 @@ chmod 600 ~/IoT_CNC_Monitoring/Deploy/infra_outputs.env
 ## Ejecutar solo infraestructura
 ```bash
 cd ~/IoT_CNC_Monitoring/Deploy
-source ~/iot_cnc_secrets.env
 bash deploy.sh --only-infra
 ```
 
 ## Ejecutar solo backend
 ```bash
 cd ~/IoT_CNC_Monitoring/Deploy
-source ~/iot_cnc_secrets.env
 bash deploy.sh --only-backend
 ```
 
@@ -1051,7 +1169,7 @@ bash 04_cleanup.sh
 
 ---
 
-# 21. Troubleshooting
+# 23. Troubleshooting
 
 ## Problema: `infra_outputs.env` no existe
 ### Causa probable
@@ -1162,7 +1280,7 @@ bash Deploy/02_backend.sh
 
 ---
 
-# 22. Recomendación final
+# 24. Recomendación final
 
 Para trabajar cómodamente desde Azure Cloud Shell, la estrategia más robusta es esta:
 

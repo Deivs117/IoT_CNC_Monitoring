@@ -31,6 +31,10 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+# Cargar secretos de Telegram si no están ya en el entorno (ejecución standalone)
+# shellcheck source=_shared_env.sh
+source "${SCRIPT_DIR}/_shared_env.sh"
+
 # shellcheck source=infra_outputs.env
 source "${ENV_FILE}"
 

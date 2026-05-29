@@ -315,6 +315,107 @@ Si no defines estas variables, los scripts usarán sus valores por defecto.
 
 ---
 
+# 9.1. Configuración de Telegram en Azure Functions
+
+Las variables `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` son necesarias para que
+el backend envíe notificaciones de alerta al bot de Telegram.  
+**No deben hardcodearse en el código.** Deben inyectarse como App Settings del Function App.
+
+## Cómo fluyen al Function App
+
+`02_backend.sh` las toma del entorno de la sesión y las inyecta automáticamente
+en los App Settings del Function App con este comando:
+
+```bash
+az functionapp config appsettings set \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --settings \
+    "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}" \
+    "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}"
+```
+
+Por eso debes definirlas **antes** de ejecutar `02_backend.sh` (ver sección 10).
+
+## Cómo configurarlas manualmente (sin re-ejecutar 02_backend.sh)
+
+Si necesitas actualizarlas sin volver a desplegar todo el backend:
+
+```bash
+# Cargar variables del archivo de secretos
+source ~/iot_cnc_secrets.env
+source Deploy/infra_outputs.env
+
+# Actualizar solo los App Settings de Telegram
+az functionapp config appsettings set \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --settings \
+    "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+    "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}"
+```
+
+## Cómo verificar que están activas en el Function App
+
+### Vía Azure CLI
+
+```bash
+source Deploy/infra_outputs.env
+
+az functionapp config appsettings list \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --query "[?name=='TELEGRAM_BOT_TOKEN' || name=='TELEGRAM_CHAT_ID']" \
+  --output table
+```
+
+La salida debe mostrar ambas variables con un valor no vacío.
+
+### Vía portal de Azure
+
+1. Abre el Function App en el portal de Azure.
+2. Ve a **Settings → Environment variables** (o **Configuration → Application settings**).
+3. Busca `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
+4. Verifica que ambas tienen valor asignado.
+
+> **No copies el token en pantalla si estás grabando o compartiendo sesión.**
+
+## Comportamiento anti-spam (cooldown de 5 minutos)
+
+El backend implementa protección anti-spam en `shared_code/alerts.py`:
+
+- **Primera detección de fallo**: se envía la alerta de inmediato.
+- **Fallo persistente**: se suprime la notificación mientras no hayan pasado
+  5 minutos desde el último envío.
+- **Recordatorio**: al cumplirse el cooldown y si la condición sigue activa,
+  se envía un recordatorio automáticamente.
+- **Recuperación** (vuelta a estado NORMAL): se limpia el estado en memoria,
+  permitiendo que un nuevo fallo vuelva a disparar la alerta inmediatamente.
+
+El intervalo de cooldown puede ajustarse sin tocar código usando la variable:
+
+```bash
+az functionapp config appsettings set \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --settings "ALERT_COOLDOWN_SECONDS=300"
+```
+
+El valor por defecto es `300` (5 minutos).
+
+## Resumen de variables de Telegram
+
+| Variable | Descripción | Obligatoria |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Token del bot obtenido desde BotFather | Sí (para alertas) |
+| `TELEGRAM_CHAT_ID` | ID del chat o grupo destino de las alertas | Sí (para alertas) |
+| `ALERT_COOLDOWN_SECONDS` | Segundos entre recordatorios de fallo activo | No (default: 300) |
+
+> Si `TELEGRAM_BOT_TOKEN` o `TELEGRAM_CHAT_ID` están vacíos, las alertas se
+> deshabilitan silenciosamente sin interrumpir el procesamiento de telemetría.
+
+---
+
 # 10. Método recomendado para exportar secretos sin perderlos
 
 La mejor práctica en Azure Cloud Shell es usar un archivo persistente con permisos restringidos.
@@ -1023,23 +1124,41 @@ bash Deploy/03_frontend_hosting.sh
 
 ## Problema: Telegram no funciona
 ### Causa probable
-Variables no cargadas:
+Variables no inyectadas en el Function App:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
 ### Solución
-Verifica tu archivo:
 
+**Paso 1**: verifica que las variables existen en el Function App:
 ```bash
-cat ~/iot_cnc_secrets.env
+source Deploy/infra_outputs.env
+az functionapp config appsettings list \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --query "[?name=='TELEGRAM_BOT_TOKEN' || name=='TELEGRAM_CHAT_ID']" \
+  --output table
 ```
 
-Corrige si es necesario, luego:
+**Paso 2**: si están vacías, corrígelas en tu archivo de secretos y reinjecta:
+```bash
+# Edita ~/iot_cnc_secrets.env con los valores correctos, luego:
+source ~/iot_cnc_secrets.env
+az functionapp config appsettings set \
+  --name "$FUNC_APP_NAME" \
+  --resource-group "$RG_NAME" \
+  --settings \
+    "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+    "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}"
+```
 
+**Paso 3**: si prefieres re-desplegar todo el backend:
 ```bash
 source ~/iot_cnc_secrets.env
 bash Deploy/02_backend.sh
 ```
+
+> Ver sección 9.1 para una guía completa sobre la configuración de Telegram.
 
 ---
 

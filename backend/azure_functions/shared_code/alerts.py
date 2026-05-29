@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, Optional
+import time
+from typing import Dict, Iterable, Optional
 
 import requests
 
@@ -12,6 +13,15 @@ HUM_MIN = float(os.getenv("HUM_MIN", "20.0"))
 HUM_MAX = float(os.getenv("HUM_MAX", "80.0"))
 VIBRATION_ANOMALY_THRESHOLD = float(os.getenv("VIBRATION_ANOMALY_THRESHOLD", "0.80"))
 NEUTRAL_VIBRATION_STATUSES = {"normal", "reposo", "desconocido"}
+
+# Cooldown entre recordatorios mientras la condición de fallo persiste (segundos).
+# Por defecto 5 minutos (300 s). Configurable vía variable de entorno.
+ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
+
+# Estado de alertas por dispositivo, mantenido en memoria mientras el proceso viva.
+# Estructura: { device_id: {"active": bool, "last_sent_at": float} }
+# Permite aplicar la política anti-spam sin necesidad de almacenamiento externo.
+_alert_state: Dict[str, dict] = {}
 
 
 def evaluate_alert(
@@ -56,6 +66,11 @@ def compose_telegram_message(device_id: str, timestamp: int, reasons: Iterable[s
 
 
 def send_telegram_alert(message: str) -> bool:
+    """Envía un mensaje a Telegram usando las variables de entorno TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID.
+
+    Eleva requests.HTTPError si el servidor devuelve un código de error HTTP.
+    Devuelve False si las credenciales no están configuradas.
+    """
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -64,11 +79,48 @@ def send_telegram_alert(message: str) -> bool:
 
     response = requests.post(
         f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage",
-        json={"chat_id": telegram_chat_id, "text": message},
+        json={"chat_id": telegram_chat_id, "text": message, "parse_mode": "Markdown"},
         timeout=10,
     )
     response.raise_for_status()
     return True
+
+
+def maybe_send_telegram_alert(device_id: str, message: str, has_alert: bool) -> bool:
+    """Envía una alerta de Telegram aplicando política anti-spam con cooldown.
+
+    Política:
+    - Envía inmediatamente cuando se detecta una nueva condición de alerta
+      (transición NORMAL → FALLO o primera detección).
+    - Suprime notificaciones repetidas mientras la condición persiste y no ha
+      transcurrido ALERT_COOLDOWN_SECONDS (por defecto 5 minutos).
+    - Envía un recordatorio cuando el cooldown expira y la condición sigue activa.
+    - Si la condición se resuelve (has_alert=False) limpia el estado en memoria,
+      permitiendo que un futuro fallo vuelva a disparar una alerta inmediata.
+
+    Args:
+        device_id: Identificador del dispositivo, usado como clave de estado.
+        message:   Texto del mensaje a enviar (ignorado cuando has_alert=False).
+        has_alert: True si existe una condición de alerta activa, False si es NORMAL.
+
+    Returns:
+        True si se envió la notificación, False si fue suprimida o no había alerta.
+    """
+    if not has_alert:
+        _alert_state.pop(device_id, None)
+        return False
+
+    now = time.time()
+    state = _alert_state.get(device_id, {"active": False, "last_sent_at": 0.0})
+    elapsed = now - state["last_sent_at"]
+
+    if not state["active"] or elapsed >= ALERT_COOLDOWN_SECONDS:
+        sent = send_telegram_alert(message)
+        if sent:
+            _alert_state[device_id] = {"active": True, "last_sent_at": now}
+        return sent
+
+    return False
 
 
 def normalize_status(vibration_status: Optional[str]) -> str:

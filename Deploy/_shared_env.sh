@@ -85,30 +85,24 @@ if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
     echo ""
 
     if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then
-      while true; do
-        # -s: modo oculto (sin eco en pantalla)
-        read -r -s -p "  Introduce TELEGRAM_BOT_TOKEN: " _input_token
-        echo ""
-        if [[ -z "${_input_token}" ]]; then
-          echo "  ⚠  TELEGRAM_BOT_TOKEN vacío — las alertas de Telegram quedarán deshabilitadas."
-          break
-        fi
+      # -s: modo oculto (sin eco en pantalla)
+      read -r -s -p "  Introduce TELEGRAM_BOT_TOKEN: " _input_token
+      echo ""
+      if [[ -z "${_input_token}" ]]; then
+        echo "  ⚠  TELEGRAM_BOT_TOKEN vacío — las alertas de Telegram quedarán deshabilitadas."
+      else
         export TELEGRAM_BOT_TOKEN="${_input_token}"
-        break
-      done
+      fi
     fi
 
     if [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-      while true; do
-        read -r -p "  Introduce TELEGRAM_CHAT_ID: " _input_chat
-        echo ""
-        if [[ -z "${_input_chat}" ]]; then
-          echo "  ⚠  TELEGRAM_CHAT_ID vacío — las alertas de Telegram quedarán deshabilitadas."
-          break
-        fi
+      read -r -p "  Introduce TELEGRAM_CHAT_ID: " _input_chat
+      echo ""
+      if [[ -z "${_input_chat}" ]]; then
+        echo "  ⚠  TELEGRAM_CHAT_ID vacío — las alertas de Telegram quedarán deshabilitadas."
+      else
         export TELEGRAM_CHAT_ID="${_input_chat}"
-        break
-      done
+      fi
     fi
 
     # -------------------------------------------------------------------------
@@ -122,7 +116,7 @@ if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] || [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
         read -r -p "  ¿Guardar credenciales en '${_SECRETS_FILE}' para próximas ejecuciones? [s/N]: " _save_answer
       fi
 
-      if [[ "${_save_answer,,}" == "s" || "${_save_answer,,}" == "si" || "${_save_answer,,}" == "sí" || "${_save_answer,,}" == "y" || "${_save_answer,,}" == "yes" ]]; then
+      if [[ "${_save_answer,,}" == "s" || "${_save_answer,,}" == "y" ]]; then
         _save_secrets_file
       else
         echo "  ℹ️  Credenciales disponibles solo para esta sesión."

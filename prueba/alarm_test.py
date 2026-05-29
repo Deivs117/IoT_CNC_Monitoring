@@ -3,8 +3,8 @@ import requests
 # ─────────────────────────────────
 # CONFIGURACIÓN
 # ─────────────────────────────────
-TELEGRAM_TOKEN = "TU_TOKEN_AQUI"       # Reemplaza con tu token del bot
-TELEGRAM_CHAT_ID = "TU_CHAT_ID_AQUI"  # Reemplaza con tu chat ID
+TELEGRAM_TOKEN = "bot8866789017:AAHXdeCudp_EKhJd7hR572kaLLY2C-VveLw"       # Reemplaza con tu token del bot
+TELEGRAM_CHAT_ID = "8291531096I"  # Reemplaza con tu chat ID
 
 # ─────────────────────────────────
 # DATOS SIMULADOS DEL MODELO DE IA

@@ -25,6 +25,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/infra_outputs.env"
 
 # ---------------------------------------------------------------------------
+# Cargar secretos de Telegram (interactivo si faltan, persistente si se acepta)
+# ---------------------------------------------------------------------------
+# shellcheck source=_shared_env.sh
+source "${SCRIPT_DIR}/_shared_env.sh"
+
+# ---------------------------------------------------------------------------
 # Parseo de flags
 # ---------------------------------------------------------------------------
 RUN_INFRA=true
@@ -131,5 +137,10 @@ printf  "║  Cosmos DB:    %-40s ║\n" "${COSMOS_ACCOUNT:-N/A}"
 printf  "║  Function App: %-40s ║\n" "${FUNC_APP_NAME:-N/A}"
 printf  "║  API URL:      %-40s ║\n" "${FUNC_BASE_URL:-N/A}"
 printf  "║  Dashboard:    %-40s ║\n" "${FRONTEND_URL:-N/A}"
+if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]] && [[ -n "${TELEGRAM_CHAT_ID:-}" ]]; then
+  printf  "║  Telegram:     %-40s ║\n" "✅ credenciales cargadas"
+else
+  printf  "║  Telegram:     %-40s ║\n" "⚠  alertas deshabilitadas"
+fi
 printf  "║  Tiempo total: %-40s ║\n" "${TOTAL}s"
 echo "╚══════════════════════════════════════════════════════════╝"

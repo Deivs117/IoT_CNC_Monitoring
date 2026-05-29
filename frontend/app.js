@@ -454,25 +454,6 @@ function pushToTimeSeries(data) {
   timeSeriesBuffer.vibration_anomaly_score = timeSeriesBuffer.vibration_anomaly_score.filter(p => p.ts >= cutoff);
 }
 
-/**
- * Expande/colapsa el panel de series de tiempo.
- * Al expandir por primera vez, fuerza un update de las gráficas para que
- * Chart.js calcule correctamente el tamaño del canvas.
- */
-function toggleTimeSeries() {
-  const panel  = document.getElementById("timeseries-panel");
-  const toggle = document.getElementById("timeseries-toggle");
-  const icon   = document.getElementById("timeseries-icon");
-  const hidden = panel.classList.toggle("hidden");
-  toggle.setAttribute("aria-expanded", String(!hidden));
-  icon.textContent = hidden ? "▼" : "▲";
-
-  // Forzar resize de Chart.js al hacerse visible (canvas tenía size 0 mientras oculto)
-  if (!hidden) {
-    [chartTemp, chartHum, chartVib].forEach(c => c && c.resize());
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Inicialización de las tres gráficas Chart.js
 // ---------------------------------------------------------------------------

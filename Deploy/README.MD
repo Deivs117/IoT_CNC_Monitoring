@@ -315,7 +315,7 @@ Si no defines estas variables, los scripts usarán sus valores por defecto.
 
 ---
 
-# 9.1. Configuración de Telegram en Azure Functions
+## 9.1. Configuración de Telegram en Azure Functions
 
 Las variables `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` son necesarias para que
 el backend envíe notificaciones de alerta al bot de Telegram.  

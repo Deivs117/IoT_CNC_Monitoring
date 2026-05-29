@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from typing import Dict, Iterable, Optional
 
 import requests
@@ -21,7 +22,10 @@ ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
 # Estado de alertas por dispositivo, mantenido en memoria mientras el proceso viva.
 # Estructura: { device_id: {"active": bool, "last_sent_at": float} }
 # Permite aplicar la política anti-spam sin necesidad de almacenamiento externo.
+# Nota: el lock protege lecturas/escrituras concurrentes si el worker usa múltiples
+# hilos; en el modelo síncrono por defecto de Azure Functions esto es precautorio.
 _alert_state: Dict[str, dict] = {}
+_alert_state_lock = threading.Lock()
 
 
 def evaluate_alert(
@@ -107,17 +111,21 @@ def maybe_send_telegram_alert(device_id: str, message: str, has_alert: bool) -> 
         True si se envió la notificación, False si fue suprimida o no había alerta.
     """
     if not has_alert:
-        _alert_state.pop(device_id, None)
+        with _alert_state_lock:
+            _alert_state.pop(device_id, None)
         return False
 
     now = time.time()
-    state = _alert_state.get(device_id, {"active": False, "last_sent_at": 0.0})
-    elapsed = now - state["last_sent_at"]
+    with _alert_state_lock:
+        state = _alert_state.get(device_id, {"active": False, "last_sent_at": 0.0})
+        elapsed = now - state["last_sent_at"]
+        should_send = not state["active"] or elapsed >= ALERT_COOLDOWN_SECONDS
 
-    if not state["active"] or elapsed >= ALERT_COOLDOWN_SECONDS:
+    if should_send:
         sent = send_telegram_alert(message)
         if sent:
-            _alert_state[device_id] = {"active": True, "last_sent_at": now}
+            with _alert_state_lock:
+                _alert_state[device_id] = {"active": True, "last_sent_at": now}
         return sent
 
     return False

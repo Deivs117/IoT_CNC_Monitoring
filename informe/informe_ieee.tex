@@ -70,12 +70,13 @@ mediante Inferencia Edge~AI y Arquitectura Serverless}
 %
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-Este trabajo presenta un sistema de Internet de las Cosas~(IoT) para el monitoreo en tiempo real de una fresadora CNC utilizada en la manufactura de circuitos impresos~(PCBs). El sistema integra un microcontrolador ESP32-C3 con un acel\'erometro MPU-6050 y un sensor de temperatura y humedad DHT22, ejecutando en el borde de la red (\textit{edge}) un modelo de aprendizaje autom\'atico basado en un Perceptr\'on Multicapa~(MLP) entrenado y desplegado con Edge~Impulse, compilado mediante su EON~Compiler sobre TensorFlow~Lite~Micro. El modelo clasifica el estado operativo de la m\'aquina en tres categor\'ias ---reposo, operaci\'on normal y anomal\'ia--- a partir de ocho caracter\'isticas de entrada derivadas de las se\~nales del acel\'erometro. Los datos se transmiten mediante el protocolo~MQTT (MQTTS directo a Azure~IoT~Hub) hacia un \textit{backend} serverless implementado en Azure~Functions~(Python), donde se procesan, almacenan en Azure~Cosmos~DB en modalidad serverless, y generan notificaciones en tiempo real v\'ia la API de Telegram ante la detecci\'on de condiciones an\'omalas. La arquitectura seleccionada prioriza el bajo costo operativo, la escalabilidad y la velocidad de prototipado frente a alternativas convencionales como m\'aquinas virtuales, InfluxDB y servicios de mensajer\'ia de pago. El modelo embebido opera con una arena de tensores de aproximadamente 2\,636~bytes, siendo viable en hardware de bajo costo.
+Este trabajo presenta un sistema de Internet de las Cosas~(IoT) para el monitoreo en tiempo real de una fresadora CNC utilizada en la manufactura de circuitos impresos~(PCBs). El sistema integra un microcontrolador ESP32-C3 con un acel\'erometro MPU-6050 y un sensor de temperatura y humedad DHT22, ejecutando en el borde de la red (\textit{edge}) un modelo de aprendizaje autom\'atico basado en un Perceptr\'on Multicapa~(MLP) entrenado y desplegado con Edge~Impulse, compilado mediante su EON~Compiler sobre TensorFlow~Lite~Micro. El modelo clasifica el estado operativo de la m\'aquina en tres categor\'ias ---reposo, operaci\'on normal y anomal\'ia--- a partir de ocho caracter\'isticas de entrada derivadas de las se\~nales del acel\'erometro. Los datos se transmiten mediante el protocolo~MQTT (MQTTS directo a Azure~IoT~Hub) hacia un \textit{backend} serverless implementado en Azure~Functions~(Python), donde se procesan, almacenan en Azure~Cosmos~DB en modalidad serverless, y generan notificaciones en tiempo real v\'ia la API de Telegram ante la detecci\'on de condiciones an\'omalas. El sistema integra adem\'as un segundo nodo ESP32-CAM que ejecuta un modelo de clasificaci\'on de im\'agenes para identificar el tipo de PCB en proceso (montaje superficial, \textit{through-hole}, mixta o ausencia de placa), publicando sus resultados por el mismo canal MQTTS sin modificar el \textit{backend}. La arquitectura seleccionada prioriza el bajo costo operativo, la escalabilidad y la velocidad de prototipado frente a alternativas convencionales como m\'aquinas virtuales, InfluxDB y servicios de mensajer\'ia de pago. El modelo de vibraci\'on embebido opera con una arena de tensores de aproximadamente 2\,636~bytes, siendo viable en hardware de bajo costo.
 \end{abstract}
 
 \begin{IEEEkeywords}
 IoT, Edge~AI, Serverless, Azure~Functions, Cosmos~DB, CNC,
-detecci\'on de anomal\'ias, TensorFlow~Lite~Micro, MQTT, PCB.
+detecci\'on de anomal\'ias, visi\'on artificial, ESP32-CAM,
+TensorFlow~Lite~Micro, MQTT, PCB.
 \end{IEEEkeywords}}
 
 % ============================================================
@@ -96,7 +97,7 @@ detecci\'on de anomal\'ias, TensorFlow~Lite~Micro, MQTT, PCB.
 Las soluciones de monitoreo industrial convencionales dependen de hardware
 propietario costoso o de arquitecturas en la nube basadas en m\'aquinas virtuales permanentemente activas, lo que las hace inaccesibles para talleres de peque\~na escala o contextos acad\'emicos con presupuesto limitado. El paradigma del \textit{Edge~AI} ---la ejecuci\'on de modelos de inferencia directamente en el microcontrolador--- combinado con servicios serverless en la nube representa una v\'ia de soluci\'on de bajo costo y alta escalabilidad~\cite{warden2020}.
 
-El presente trabajo propone e implementa un sistema integral que cubre la cadena completa: adquisici\'on de se\~nales f\'isicas, inferencia en el borde,transmisi\'on ligera de datos, procesamiento serverless, persistencia eficiente y visualizaci\'on en un dashboard~web. La arquitectura est\'a dise\~nada para recibir de forma modular una segunda unidad ESP32-CAM con visi\'on artificial sin requerir cambios en el \textit{backend} ni en el esquema de almacenamiento.
+El presente trabajo propone e implementa un sistema integral que cubre la cadena completa: adquisici\'on de se\~nales f\'isicas, inferencia en el borde,transmisi\'on ligera de datos, procesamiento serverless, persistencia eficiente y visualizaci\'on en un dashboard~web. La arquitectura, dise\~nada de forma modular, integra adem\'as una segunda unidad ESP32-CAM con visi\'on artificial que clasifica el tipo de PCB en proceso, incorporada sin requerir cambios en el \textit{backend} ni en el esquema de almacenamiento.
 
 
 %  II. ARQUITECTURA DEL SISTEMA
@@ -109,8 +110,9 @@ El sistema se organiza en cuatro capas funcionales, tal como se muestra en
 la~Fig.~\ref{fig:arquitectura}:
 
 \begin{enumerate}
-  \item \textbf{Capa de hardware y Edge~AI:} nodo ESP32-C3 con sensores
-        MPU-6050 y DHT22, inferencia TFLite~Micro.
+  \item \textbf{Capa de hardware y Edge~AI:} nodo principal ESP32-C3 con
+        sensores MPU-6050 y DHT22 (inferencia de vibraci\'on con TFLite~Micro)
+        y nodo ESP32-CAM con clasificaci\'on de im\'agenes de PCB.
   \item \textbf{Capa de comunicaci\'on:} protocolo MQTT sobre TLS (MQTTS).
   \item \textbf{Capa de c\'omputo serverless:}
         Azure~IoT~Hub $\rightarrow$ Azure~Functions $\rightarrow$ Azure~Cosmos~DB.
@@ -122,24 +124,27 @@ la~Fig.~\ref{fig:arquitectura}:
 \centering
 \begin{tikzpicture}[
   node distance = 5mm and 6mm,
-  box/.style    = {draw, rounded corners=2pt, minimum width=3.0cm,
+  box/.style    = {draw, rounded corners=2pt, minimum width=2.7cm,
                    minimum height=0.6cm, align=center, font=\footnotesize},
   arrow/.style  = {-Stealth, thick}
 ]
-  \node[box, fill=blue!15]   (esp) {ESP32-C3\\MPU-6050 + DHT22\\TFLite MLP};
-  \node[box, fill=orange!20, below=of esp] (hub) {Azure IoT Hub};
+  \node[box, fill=blue!15]   (esp) {ESP32-C3\\MPU-6050 + DHT22\\(vibraci\'on)};
+  \node[box, fill=blue!15, right=6mm of esp] (cam) {ESP32-CAM\\(visi\'on: clase PCB)};
+  \node[box, fill=orange!20, below=10mm of $(esp)!0.5!(cam)$] (hub) {Azure IoT Hub};
   \node[box, fill=green!20,  below=of hub] (fn)  {Azure Functions (Python)};
   \node[box, fill=purple!20, below=of fn]  (db)  {Azure Cosmos DB Serverless};
   \node[box, fill=cyan!15,   below=of db]  (fe)  {Dashboard Web};
-  \node[box, fill=yellow!25, right=16mm of fn] (tg) {Telegram Bot API};
+  \node[box, fill=yellow!25, right=14mm of fn] (tg) {Telegram Bot API};
 
-  \draw[arrow] (esp) -- node[right,font=\tiny]{MQTTS} (hub);
+  \draw[arrow] (esp) -- node[left,font=\tiny]{MQTTS} (hub);
+  \draw[arrow] (cam) -- node[right,font=\tiny]{MQTTS} (hub);
   \draw[arrow] (hub) -- node[right,font=\tiny]{Event Hub trigger} (fn);
   \draw[arrow] (fn)  -- node[right,font=\tiny]{Cosmos SDK} (db);
   \draw[arrow] (db)  -- node[right,font=\tiny]{REST} (fe);
   \draw[arrow] (fn)  -- node[above,font=\tiny]{Alerta} (tg);
 \end{tikzpicture}
-\caption{Arquitectura completa del sistema de monitoreo CNC.}
+\caption{Arquitectura completa del sistema de monitoreo CNC con los dos nodos
+de borde (vibraci\'on y visi\'on).}
 \label{fig:arquitectura}
 \end{figure}
 
@@ -171,7 +176,17 @@ LED estado & Salida digital   & GPIO~10 \\
 \end{tabular}
 \end{table}
 
-El acel\'erometro se configura en el rango $\pm2\,g$, con una sensibilidad de 16\,384~LSB/g. Las muestras de aceleraci\'on se acumulan y se transforman en el vector de caracter\'isticas que alimenta al modelo.
+El acel\'erometro se configura en el rango $\pm2\,g$, con una sensibilidad de 16\,384~LSB/g. Las muestras de aceleraci\'on se acumulan y se transforman en el vector de caracter\'isticas que alimenta al modelo. La Fig.~\ref{fig:montaje} muestra el montaje f\'isico del prototipo sobre \textit{protoboard}.
+
+El segundo nodo es un m\'odulo \textbf{ESP32-CAM (AI~Thinker)}, encargado de la capa de visi\'on artificial. Reutiliza el mismo esquema de conectividad (MQTTS hacia Azure~IoT~Hub) y ejecuta localmente un modelo de clasificaci\'on de im\'agenes para identificar el tipo de PCB.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\columnwidth]{img/circuitofisico.jpeg}
+\caption{Montaje f\'isico del prototipo sobre \textit{protoboard}: ESP32 con los
+sensores MPU-6050 y DHT22.}
+\label{fig:montaje}
+\end{figure}
 
 \subsection{Modelo de Aprendizaje Autom\'atico}
 
@@ -246,7 +261,32 @@ Listado~\ref{lst:json}.
 }
 \end{lstlisting}
 
-El campo \texttt{visual\_anomaly\_score} queda reservado en \texttt{null} para la futura integraci\'on de la ESP32-CAM sin romper el esquema existente.
+El campo \texttt{visual\_anomaly\_score} se mantiene en \texttt{null} en el nodo principal, ya que la informaci\'on de visi\'on la publica el nodo ESP32-CAM en un mensaje independiente, conservando as\'i un esquema com\'un y desacoplado entre ambos nodos.
+
+\subsection{Firmware del Nodo de Visi\'on (ESP32-CAM)}
+
+El nodo de visi\'on se basa en un m\'odulo ESP32-CAM~(AI~Thinker) y ejecuta, mediante el SDK de Edge~Impulse (biblioteca \texttt{CNC\_Image\_Clasification\_inferencing}), un modelo de visi\'on basado en la arquitectura \textbf{FOMO} (\textit{Faster Objects, More Objects}) que identifica el tipo de PCB presente bajo la c\'amara a partir de im\'agenes de 96$\times$96~p\'ixeles en escala de grises. El modelo distingue cuatro clases: \texttt{PCB\_Mixta}, \texttt{PCB\_SMD} (montaje superficial), \texttt{PCB\_TH} (\textit{through-hole}) y \texttt{Sin\_PCB} (ausencia de placa). Tras cada inferencia, el firmware publica por MQTTS hacia Azure~IoT~Hub un mensaje con la clase ganadora, su confianza, el tiempo de inferencia y el vector completo de probabilidades, conforme al contrato del Listado~\ref{lst:json_cam}.
+
+\begin{lstlisting}[caption={Contrato JSON del nodo de visi\'on (ESP32-CAM).},label={lst:json_cam}]
+{
+  "device_id": "cnc_camera_01",
+  "timestamp": 1716076800,
+  "camera": {
+    "pcb_class":     "PCB_SMD",
+    "confidence":    0.873,
+    "inference_ms":  241,
+    "model_version": "1.0.0",
+    "probabilities": {
+      "PCB_Mixta": 0.051,
+      "PCB_SMD":   0.873,
+      "PCB_TH":    0.028,
+      "Sin_PCB":   0.048
+    }
+  }
+}
+\end{lstlisting}
+
+Para no saturar el IoT~Hub, el nodo aplica una regla de publicaci\'on por tasa: env\'ia un mensaje solo si transcurri\'o el intervalo m\'inimo configurado \emph{o} si la clase detectada cambi\'o respecto a la \'ultima publicada, manteniendo \'unicamente la se\~nal \'util.
 
 \subsection{Backend Serverless (Azure Functions)}
 
@@ -274,7 +314,17 @@ Cuando el \textit{score} de anomal\'ia supera el umbral configurable
 (por defecto 0.80) o los valores de temperatura y humedad exceden sus rangos
 normales (15--45\,°C y 20--80\,\%, respectivamente), la funci\'on
 \texttt{telemetry\_processor} realiza un HTTP~POST a la API de Telegram,
-entregando una notificaci\'on instant\'anea con los valores del evento.
+entregando una notificaci\'on instant\'anea con los valores del evento. La
+Fig.~\ref{fig:telegram} muestra alertas reales recibidas en el bot de Telegram
+durante las pruebas.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.62\columnwidth]{img/telegram.jpeg}
+\caption{Alertas en tiempo real recibidas en el bot de Telegram, con el
+dispositivo, la marca de tiempo y el motivo que dispar\'o la notificaci\'on.}
+\label{fig:telegram}
+\end{figure}
 
 
 %  IV. JUSTIFICACIÓN DE LA ARQUITECTURA
@@ -392,27 +442,91 @@ Anomal\'ia        & 0  & 0  & \cellcolor{green!25}32 \\
 \end{tabular}
 \end{table}
 
-La Tabla~\ref{tab:modelo} resume los par\'ametros t\'ecnicos del modelo.
+La Tabla~\ref{tab:modelo} resume y compara los par\'ametros t\'ecnicos de los
+dos modelos embebidos (vibraci\'on y visi\'on).
 
 \begin{table}[!t]
-\caption{Par\'ametros t\'ecnicos del modelo embebido}
+\caption{Par\'ametros t\'ecnicos de los modelos embebidos}
 \label{tab:modelo}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{ll}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lll}
 \toprule
-\textbf{Par\'ametro} & \textbf{Valor} \\
+\textbf{Par\'ametro} & \textbf{Vibraci\'on} & \textbf{Visi\'on} \\
 \midrule
-Arquitectura           & MLP (capas densas, ReLU + Softmax) \\
-Entradas               & 8 caracter\'isticas \\
-Clases de salida       & 3 (reposo, normal, anomal\'ia) \\
-Tama\~no del modelo    & [COMPLETAR] bytes (FlatBuffer TFLite) \\
-Arena de tensores      & 2\,636 bytes (\textit{tensor arena} TFLite) \\
-Umbral anomal\'ia LED  & 0.70 \\
-Umbral alerta cloud    & 0.80 \\
+Arquitectura          & MLP (densas)      & FOMO (CNN) \\
+Entrada               & 8 caract.\ (1D)   & 96$\times$96$\times$1 (9\,216) \\
+Clases de salida      & 3                 & 4 \\
+Par\'ametros          & 195               & $\sim$250\,000 \\
+Uso de flash (impulso) & $\sim$80\,KB & $\sim$250\,KB \\
+Arena de tensores     & 2\,636~bytes      & --- \\
+Umbral LED / nube     & 0.70 / 0.80       & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{M\'etricas del Modelo de Visi\'on (Clasificaci\'on de PCB)}
+
+El modelo de visi\'on se entren\'o en Edge~Impulse durante 73~\textit{epochs}.
+La Fig.~\ref{fig:loss} muestra la evoluci\'on de la p\'erdida (\textit{loss}) de
+entrenamiento y validaci\'on, que convergen de forma conjunta hacia valores
+cercanos a 0.02 sin se\~nales de sobreajuste. La Tabla~\ref{tab:matrizpcb}
+presenta la matriz de confusi\'on resultante: las clases \texttt{Background},
+\texttt{PCB\_Mixta}, \texttt{PCB\_SMD} y \texttt{Sin\_PCB} se clasifican sin
+error (100\,\%), mientras que \texttt{PCB\_TH} alcanza un 94.4\,\% (con un
+5.6\,\% confundido con \texttt{Background}). Los \textit{F1-Score} por clase son
+1.00, 1.00, 1.00, 0.97 y 0.93, respectivamente, evidenciando un desempe\~no
+elevado del clasificador de im\'agenes. Sus par\'ametros t\'ecnicos se comparan
+con los del modelo de vibraci\'on en la Tabla~\ref{tab:modelo}.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\columnwidth]{img/loss.jpeg}
+\caption{Evoluci\'on de la p\'erdida de entrenamiento y validaci\'on del modelo
+de visi\'on a lo largo de 73~\textit{epochs}.}
+\label{fig:loss}
+\end{figure}
+
+\begin{table}[!t]
+\caption{Matriz de confusi\'on del modelo de visi\'on (PCB), normalizada por
+fila (\%), y \textit{F1-Score} por clase}
+\label{tab:matrizpcb}
+\centering
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{3.5pt}
+\footnotesize
+\begin{tabular}{l|ccccc}
+\toprule
+\textbf{Real\,$\downarrow$ / Pred.\,$\rightarrow$} & \textbf{Bg} & \textbf{Mixta} & \textbf{SMD} & \textbf{TH} & \textbf{Sin} \\
+\midrule
+Background & \cellcolor{green!25}100 & 0 & 0 & 0 & 0 \\
+PCB\_Mixta & 0 & \cellcolor{green!25}100 & 0 & 0 & 0 \\
+PCB\_SMD   & 0 & 0 & \cellcolor{green!25}100 & 0 & 0 \\
+PCB\_TH    & \cellcolor{red!12}5.6 & 0 & 0 & \cellcolor{green!25}94.4 & 0 \\
+Sin\_PCB   & 0 & 0 & 0 & 0 & \cellcolor{green!25}100 \\
+\midrule
+\textbf{F1-Score} & 1.00 & 1.00 & 1.00 & 0.97 & 0.93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sistema Integrado en Operaci\'on}
+
+La Fig.~\ref{fig:dashboard} muestra el dashboard web en funcionamiento,
+integrando en una sola vista las lecturas de temperatura y humedad, el estado y
+\textit{score} de vibraci\'on, el estado de alerta, la clasificaci\'on de PCB
+proveniente del nodo ESP32-CAM con sus probabilidades, el control del actuador
+(encender/apagar/reiniciar) y el historial de lecturas con exportaci\'on a CSV.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\columnwidth]{img/dashboard.jpeg}
+\caption{Dashboard web del sistema (\textit{Monitor CNC PCB}) integrando
+telemetr\'ia de vibraci\'on y ambiente, clasificaci\'on de PCB por visi\'on,
+control del actuador e historial de lecturas.}
+\label{fig:dashboard}
+\end{figure}
 
 \subsection{Estimaci\'on de Costo Operativo}
 
@@ -450,12 +564,24 @@ Se dise\~n\'o e implement\'o un sistema IoT completo para el monitoreo predictiv
   \item El modelo MLP embebido (arena de $\approx$2\,636~bytes) permite la clasificaci\'on en tiempo real en el ESP32-C3, reduciendo la latencia y el ancho de banda frente a inferencia en la nube.
   \item La arquitectura serverless elimina el costo base de infraestructura ($<$\$0.11~USD/mes para una CNC individual).
   \item Las alertas v\'ia Telegram ofrecen notificaciones en tiempo real sin costo adicional, con implementaci\'on en pocas l\'ineas de c\'odigo.
-  \item La arquitectura queda preparada para integrar una capa de visi\'on artificial (ESP32-CAM) de forma modular, sin redise\~nar el
-        \textit{backend} ni el esquema de almacenamiento, como evidencia el \textit{endpoint} \texttt{/api/camara} ya disponible.
+  \item Se integr\'o una capa de visi\'on artificial (ESP32-CAM) que clasifica el tipo de PCB en cuatro categor\'ias con un \textit{F1-Score} de hasta 1.00, incorporada de forma modular sobre el mismo \textit{backend} y esquema de almacenamiento, sin necesidad de redise\~nar la arquitectura.
 \end{enumerate}
 
-Como trabajo futuro se contempla la integraci\'on de la ESP32-CAM, el
-entrenamiento del modelo con un \textit{dataset} de mayor tama\~no y la implementaci\'on de actualizaciones OTA del firmware.
+Como trabajo futuro se contempla el entrenamiento de ambos modelos con
+\textit{datasets} de mayor tama\~no, la fusi\'on de las inferencias de vibraci\'on
+y visi\'on para un diagn\'ostico combinado, y la implementaci\'on de
+actualizaciones OTA del firmware.
+
+
+%  DISPONIBILIDAD DE CÓDIGO Y DATOS
+
+\section*{Disponibilidad de C\'odigo y Datos}
+
+El c\'odigo fuente completo del proyecto ---firmware de ambos nodos
+(ESP32-C3 y ESP32-CAM), \textit{backend} serverless en Azure~Functions,
+dashboard web, \textit{dataset} de vibraci\'on y \textit{scripts} de
+despliegue--- se encuentra disponible en el repositorio p\'ublico:
+\url{https://github.com/Deivs117/IoT_CNC_Monitoring}.
 
 
 %  REFERENCIAS

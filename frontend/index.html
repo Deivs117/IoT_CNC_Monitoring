@@ -101,14 +101,10 @@
       </div>
     </section>
 
-    <!-- Panel colapsable — Series de tiempo (últimos 5 minutos) -->
+    <!-- Series de tiempo (últimos 5 minutos) -->
     <section class="section">
-      <button class="accordion-toggle" id="timeseries-toggle"
-              onclick="toggleTimeSeries()" aria-expanded="false">
-        <span>📈 Series de tiempo — Últimos 5 minutos</span>
-        <span class="accordion-toggle__icon" id="timeseries-icon">▼</span>
-      </button>
-      <div id="timeseries-panel" class="timeseries-panel hidden">
+      <h2 class="section__title">📈 Series de tiempo — Últimos 5 minutos</h2>
+      <div id="timeseries-panel" class="timeseries-panel">
         <div class="timeseries-charts">
           <div class="timeseries-chart-slot" id="chart-temp">
             <div class="timeseries-chart-label">🌡️ Temperatura (°C)</div>

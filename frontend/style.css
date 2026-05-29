@@ -358,42 +358,11 @@ h1 {
   padding-top: 8px;
 }
 
-/* ── Accordion toggle ────────────────────────────────────────────────────── */
-.accordion-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 12px 16px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition), border-color var(--transition),
-              color var(--transition);
-}
-.accordion-toggle:hover {
-  background: var(--color-surface-2);
-  border-color: var(--color-primary);
-  color: var(--color-text);
-}
-.accordion-toggle__icon {
-  font-size: 0.75rem;
-  flex-shrink: 0;
-}
-
 /* ── Panel de series de tiempo (últimos 5 minutos) ───────────────────────── */
 .timeseries-panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius);
   padding: 16px;
 }
 .timeseries-hint {
@@ -423,6 +392,8 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 12px;
+  height: 185px;
+  overflow: hidden;
 }
 .timeseries-chart-label {
   font-size: 0.72rem;

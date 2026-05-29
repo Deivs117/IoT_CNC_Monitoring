@@ -30,7 +30,12 @@ Dataset balanceado con 468 muestras de telemetria del nodo principal, etiquetada
 | `var_z` | float | Varianza de aceleracion en el eje Z |
 | `temperature` | float | Temperatura (grados Celsius) |
 | `humidity` | float | Humedad relativa (%) |
-| `label` | int | Etiqueta: 0 = operacion normal, 1 = anomalia vibracional |
+| `label` | int | Etiqueta de clase: 0 = normal, 1 = anomalia, 2 = tercera clase operacional |
+
+El dataset esta balanceado con 156 muestras por clase (3 clases x 156 = 468 muestras).  
+Los nombres exactos de las clases estan definidos en Edge Impulse Studio al momento del entrenamiento;  
+la clase 2 representa un tercer patron vibracional diferenciado de los casos 0 y 1.  
+El firmware identifica la clase `"anomalia"` por nombre de etiqueta (ver `cnc_main_node.ino` linea 430).
 
 Las caracteristicas estadisticas (media, varianza) se calculan sobre una ventana de muestras del MPU-6050 (acelerometro 6-ejes) tal como lo realiza el firmware en `sensors.h`.
 

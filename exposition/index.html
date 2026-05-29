@@ -1329,109 +1329,115 @@
 </section>
 
 <hr class="sep">
-
 <!-- ═══════════════════════════════════════════════════════
      7. CUMPLIMIENTO DE REQUERIMIENTOS
 ════════════════════════════════════════════════════════ -->
 <section id="requerimientos">
   <div class="sec-label">Sección 07</div>
-  <h2 class="sec-title">Cumplimiento de Requerimientos del Profesor</h2>
+  <h2 class="sec-title">Cumplimiento de Requerimientos</h2>
   <p class="sec-desc">
     Mapa completo de cada requerimiento con la evidencia concreta en la solución y el componente que lo implementa.
   </p>
 
-  <div class="reveal" style="overflow-x:auto;">
-    <table class="req-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Requerimiento del Profesor</th>
-          <th>✓</th>
-          <th>Evidencia en la Solución</th>
-          <th>Componente</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="req-num">R1</td>
-          <td>Monitorear temperatura, humedad, clasificación de movimiento y de imágenes</td>
-          <td class="check">✓</td>
-          <td>DHT22 (temp+hum), MPU-6050+MLP (movimiento), OV2640+FOMO (imágenes)</td>
-          <td><span class="comp-tag ct-fw">Firmware</span> <span class="comp-tag ct-ai">Edge AI</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R2</td>
-          <td>Conectar sensores a GPIO del ESP32 (alimentación, tierra, señal)</td>
-          <td class="check">✓</td>
-          <td>DHT22→GPIO4, MPU-6050→I²C SDA/SCL (GPIO21/22), VCC 3.3V, GND</td>
-          <td><span class="comp-tag ct-fw">Firmware</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R3</td>
-          <td>Instalar librerías necesarias para sensores</td>
-          <td class="check">✓</td>
-          <td>Adafruit DHT, Adafruit MPU6050, ArduinoJson, PubSubClient, Edge Impulse SDK (.zip)</td>
-          <td><span class="comp-tag ct-fw">Firmware</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R4</td>
-          <td>Verificar valores mediante monitor serial</td>
-          <td class="check">✓</td>
-          <td>Serial.print() a 115200 baud imprime temp, hum, accel XYZ y clase predicha antes de publicar</td>
-          <td><span class="comp-tag ct-fw">Firmware</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R5</td>
-          <td>Implementar modelos de IA en el dispositivo Edge</td>
-          <td class="check">✓</td>
-          <td>MLP int8 ~2KB para vibración (ESP32), FOMO MobileNetV2 ~275KB para visión (ESP32-CAM)</td>
-          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Firmware</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R6</td>
-          <td>Conectar el ESP32 a una red WiFi</td>
-          <td class="check">✓</td>
-          <td>WiFi.begin(ssid, pass), reconexión automática, MQTTS TLS 1.2 puerto 8883 a Azure IoT Hub</td>
-          <td><span class="comp-tag ct-fw">Firmware</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R7</td>
-          <td>Almacenar los datos en una base de datos</td>
-          <td class="check">✓</td>
-          <td>Cosmos DB NoSQL (CNCMonitor/Telemetry), persistencia via Azure Function serverless con upsert</td>
-          <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R8a</td>
-          <td>Dashboard — datos medidos por sensores</td>
-          <td class="check">✓</td>
-          <td>Temperatura °C, humedad %, vibración XYZ mostrados en tiempo real con polling cada 5 s</td>
-          <td><span class="comp-tag ct-fw">Frontend</span> <span class="comp-tag ct-bk">Backend</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R8b</td>
-          <td>Dashboard — clasificación IA desde temperatura/humedad + acelerómetro/giroscopio</td>
-          <td class="check">✓</td>
-          <td>Estado vibracional (clase 0/1/2) y anomaly score publicados y visualizados en dashboard</td>
-          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R8c</td>
-          <td>Dashboard — clasificación de imágenes</td>
-          <td class="check">✓</td>
-          <td>Clase PCB (PCB_SMD / PCB_TH / PCB_Mixta / Sin_PCB) con barras de probabilidad en dashboard</td>
-          <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
-        </tr>
-        <tr>
-          <td class="req-num">R9</td>
-          <td>Generar alarmas a partir de los datos del modelo de IA (Telegram/SMS/etc.)</td>
-          <td class="check">✓</td>
-          <td>evaluate_alert() + Telegram Bot API, disparado por anomaly score ≥ 0.80 o estado vibracional anómalo</td>
-          <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <!-- Tabla desplegable -->
+  <details class="sec-desc">
+    <summary class="sec-desc">
+      <span class="sec-desc">Ver tabla completa de requerimientos y evidencias</span>
+    </summary>
+
+    <div class="req-accordion__content" style="overflow-x:auto;">
+      <table class="req-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Requerimiento del Profesor</th>
+            <th>✓</th>
+            <th>Evidencia en la Solución</th>
+            <th>Componente</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="req-num">R1</td>
+            <td>Monitorear temperatura, humedad, clasificación de movimiento y de imágenes</td>
+            <td class="check">✓</td>
+            <td>DHT22 (temp+hum), MPU-6050+MLP (movimiento), OV2640+FOMO (imágenes)</td>
+            <td><span class="comp-tag ct-fw">Firmware</span> <span class="comp-tag ct-ai">Edge AI</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R2</td>
+            <td>Conectar sensores a GPIO del ESP32 (alimentación, tierra, señal)</td>
+            <td class="check">✓</td>
+            <td>DHT22→GPIO4, MPU-6050→I²C SDA/SCL (GPIO21/22), VCC 3.3V, GND</td>
+            <td><span class="comp-tag ct-fw">Firmware</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R3</td>
+            <td>Instalar librerías necesarias para sensores</td>
+            <td class="check">✓</td>
+            <td>Adafruit DHT, Adafruit MPU6050, ArduinoJson, PubSubClient, Edge Impulse SDK (.zip)</td>
+            <td><span class="comp-tag ct-fw">Firmware</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R4</td>
+            <td>Verificar valores mediante monitor serial</td>
+            <td class="check">✓</td>
+            <td>Serial.print() a 115200 baud imprime temp, hum, accel XYZ y clase predicha antes de publicar</td>
+            <td><span class="comp-tag ct-fw">Firmware</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R5</td>
+            <td>Implementar modelos de IA en el dispositivo Edge</td>
+            <td class="check">✓</td>
+            <td>MLP int8 ~2KB para vibración (ESP32), FOMO MobileNetV2 ~275KB para visión (ESP32-CAM)</td>
+            <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Firmware</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R6</td>
+            <td>Conectar el ESP32 a una red WiFi</td>
+            <td class="check">✓</td>
+            <td>WiFi.begin(ssid, pass), reconexión automática, MQTTS TLS 1.2 puerto 8883 a Azure IoT Hub</td>
+            <td><span class="comp-tag ct-fw">Firmware</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R7</td>
+            <td>Almacenar los datos en una base de datos</td>
+            <td class="check">✓</td>
+            <td>Cosmos DB NoSQL (CNCMonitor/Telemetry), persistencia via Azure Function serverless con upsert</td>
+            <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R8a</td>
+            <td>Dashboard — datos medidos por sensores</td>
+            <td class="check">✓</td>
+            <td>Temperatura °C, humedad %, vibración XYZ mostrados en tiempo real con polling cada 5 s</td>
+            <td><span class="comp-tag ct-fw">Frontend</span> <span class="comp-tag ct-bk">Backend</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R8b</td>
+            <td>Dashboard — clasificación IA desde temperatura/humedad + acelerómetro/giroscopio</td>
+            <td class="check">✓</td>
+            <td>Estado vibracional (clase 0/1/2) y anomaly score publicados y visualizados en dashboard</td>
+            <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R8c</td>
+            <td>Dashboard — clasificación de imágenes</td>
+            <td class="check">✓</td>
+            <td>Clase PCB (PCB_SMD / PCB_TH / PCB_Mixta / Sin_PCB) con barras de probabilidad en dashboard</td>
+            <td><span class="comp-tag ct-ai">Edge AI</span> <span class="comp-tag ct-fw">Frontend</span></td>
+          </tr>
+          <tr>
+            <td class="req-num">R9</td>
+            <td>Generar alarmas a partir de los datos del modelo de IA (Telegram/SMS/etc.)</td>
+            <td class="check">✓</td>
+            <td>evaluate_alert() + Telegram Bot API, disparado por anomaly score ≥ 0.80 o estado vibracional anómalo</td>
+            <td><span class="comp-tag ct-bk">Backend</span> <span class="comp-tag ct-cl">Cloud</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
 
   <!-- Evaluation criteria -->
   <div class="sec-label" style="margin-top:2.5rem;">Criterios de evaluación</div>

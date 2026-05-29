@@ -421,9 +421,9 @@ function pushToTimeSeries(data) {
   const cutoff = now - TIME_WINDOW_MS;
 
   // Solo procesar documentos del nodo principal (ignorar cámara)
-  const mainDocs = data.filter(item => item.device_type !== "camera");
+  const mainNodeDocs = data.filter(item => item.device_type !== "camera");
 
-  mainDocs.forEach((item) => {
+  mainNodeDocs.forEach((item) => {
     const ts = item.timestamp ? item.timestamp * 1000 : null;
     if (!ts || ts <= lastPushedTimestamp || ts < cutoff) return;
 
@@ -443,7 +443,7 @@ function pushToTimeSeries(data) {
   });
 
   // Avanzar lastPushedTimestamp solo con timestamps del nodo principal
-  const maxTs = mainDocs.reduce(
+  const maxTs = mainNodeDocs.reduce(
     (m, d) => Math.max(m, d.timestamp ? d.timestamp * 1000 : 0), 0
   );
   if (maxTs > lastPushedTimestamp) lastPushedTimestamp = maxTs;

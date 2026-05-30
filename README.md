@@ -2,6 +2,8 @@
 
 Sistema IoT + Edge AI + Serverless para monitoreo analitico y preventivo de una fresadora CNC usada en manufactura de PCBs.
 
+Sustentable: https://deivs117.github.io/IoT_CNC_Monitoring/
+
 ---
 
 ## 1. Objetivo del proyecto

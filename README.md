@@ -1,53 +1,53 @@
 # IoT CNC PCB Monitor
 
-Sistema IoT + Edge AI + Serverless para monitoreo analitico y preventivo de una fresadora CNC usada en manufactura de PCBs.
+IoT + Edge AI + Serverless system for analytical and preventive monitoring of a CNC milling machine used in PCB manufacturing.
 
-Sustentable: https://deivs117.github.io/IoT_CNC_Monitoring/
-
----
-
-## 1. Objetivo del proyecto
-
-`IoT_CNC_Monitoring` integra firmware embebido, funciones serverless en Azure y un dashboard web para detectar en tiempo real desviaciones de temperatura, humedad y vibracion que puedan danar placas de cobre o romper herramientas.
-
-El sistema incorpora ademas un **nodo ESP32-CAM independiente** con vision artificial Edge AI (Edge Impulse) para clasificar automaticamente el tipo de PCB posicionada en la bancada de la CNC, determinando la ruta de manufactura correspondiente.
+More Information: [https://deivs117.github.io/IoT_CNC_Monitoring/](https://deivs117.github.io/IoT_CNC_Monitoring/)
 
 ---
 
-## 2. Arquitectura de la solucion
+## 1. Project Objective
+
+`IoT_CNC_Monitoring` integrates embedded firmware, serverless functions in Azure, and a web dashboard to detect temperature, humidity, and vibration deviations in real time that could damage copper boards or break tools.
+
+The system also incorporates an **independent ESP32-CAM node** with Edge AI (Edge Impulse) to automatically classify the type of PCB positioned on the CNC bed, determining the corresponding manufacturing route.
+
+---
+
+## 2. Architecture of the solution
 
 ```mermaid
 graph TD
-    subgraph Firmware["Dispositivos de campo"]
-        A["ESP32 principal\n(MPU-6050 + DHT22 + Edge Impulse)"]
+    subgraph Firmware["Field Devices"]
+        A["Main ESP32\n(MPU-6050 + DHT22 + Edge Impulse)"]
         C["ESP32-CAM\n(OV2640 + Edge Impulse PCB)"]
     end
 
     subgraph AzureCloud["Azure Cloud"]
         B[Azure IoT Hub]
         D["Azure Function\ntelemetry_processor"]
-        E1["_build_camera_document()\nvalida pcb_class + probs"]
-        E2["_build_vibration_document()\nanaliza sensores + alertas"]
+        E1["_build_camera_document()\nvalidates pcb_class + probs"]
+        E2["_build_vibration_document()\nanalyzes sensors + alerts"]
         F[("Cosmos DB\nCNCMonitor/Telemetry")]
         G[Telegram Bot]
-        H["Azure Function\nget_datos  GET /api/datos"]
-        I["Azure Function\ndescargar_csv  GET /api/datos/csv"]
-        K["Azure Function\ncontrol_actuador  POST /api/actuador"]
-        L["ingestar_camara\nPOST /api/camara\n(canal HTTP de depuracion)"]
+        H["Azure Function\nget_data  GET /api/data"]
+        I["Azure Function\ndownload_csv  GET /api/data/csv"]
+        K["Azure Function\nactuator_control  POST /api/actuator"]
+        L["ingest_camera\nPOST /api/camera\n(HTTP debug channel)"]
     end
 
     subgraph Frontend["Frontend"]
-        J["Dashboard oscuro"]
+        J["Dark Dashboard"]
     end
 
     A -->|MQTTS 8883| B
     C -->|MQTTS 8883| B
     B -->|EventHub trigger| D
-    D -->|campo camera presente| E1
-    D -->|campo camera ausente| E2
+    D -->|camera field present| E1
+    D -->|camera field absent| E2
     E1 --> F
     E2 --> F
-    E2 -->|si hay alerta| G
+    E2 -->|if alert| G
     F --> H
     F --> I
     H --> J
@@ -55,90 +55,92 @@ graph TD
     J --> K
     K -->|Direct Method / C2D| A
     L --> F
+
 ```
 
-> **Nota:** `telemetry_processor` detecta automaticamente el tipo de payload: si contiene el campo `camera` lo trata como telemetria de la ESP32-CAM; de lo contrario lo procesa como telemetria del nodo principal (vibracion/sensores). Ambos tipos coexisten en el mismo contenedor Cosmos DB identificados por `device_id`.
+> **Note:** `telemetry_processor` automatically detects the payload type: if it contains the `camera` field, it treats it as ESP32-CAM telemetry; otherwise, it processes it as telemetry from the main node (vibration/sensors). Both types coexist in the same Cosmos DB container identified by `device_id`.
 
 ---
 
-## 3. Estructura del repositorio
+## 3. Repository Structure
 
 ```text
 IoT_CNC_Monitoring/
 ├── .gitignore
 ├── README.md
 ├── firmware/
-│   ├── cnc_main_node/              <- Nodo principal ESP32
+│   ├── cnc_main_node/            <- Main ESP32 Node
 │   │   ├── cnc_main_node.ino
 │   │   ├── config.h.template
 │   │   ├── edge_impulse_vibration.h
 │   │   ├── sensors.h
-│   │   └── ei-cnc_monitor_project-arduino-*.zip  <- libreria Edge Impulse exportada
+│   │   └── ei-cnc_monitor_project-arduino-*.zip  <- Exported Edge Impulse library
 │   ├── cnc_camera_node/
-│   │   ├── capture_express/        <- Firmware de captura para dataset
-│   │   │   ├── capture_express.ino   (GET /capture -> JPEG crudo)
+│   │   ├── capture_express/        <- Capture firmware for dataset
+│   │   │   ├── capture_express.ino   (GET /capture -> raw JPEG)
 │   │   │   └── camera_secrets.h.template
-│   │   ├── dataset_capture/        <- Automatizacion Python con UV/Astral
+│   │   ├── dataset_capture/        <- Python automation with UV/Astral
 │   │   │   ├── pyproject.toml
 │   │   │   ├── uv.lock
-│   │   │   ├── capture.py          (descarga imagenes por clase)
+│   │   │   ├── capture.py          (download images by class)
 │   │   │   ├── README.md
-│   │   │   └── dataset/            (imagenes capturadas, excluidas de git)
-│   │   └── cnc_camera_node/        <- Firmware de inferencia Edge Impulse
-│   │       ├── cnc_camera_node.ino   (clasifica PCB + publica cada 10s)
-│   │       └── camera_secrets.h.template
+│   │   │   └── dataset/            (captured images, excluded from git)
+│   │   └── cnc_camera_node/        <- Edge Impulse inference firmware
+│   │        ├── cnc_camera_node.ino   (classifies PCB + publishes every 10s)
+│   │        └── camera_secrets.h.template
 │   └── model/
 │       └── dataset/
-│           └── dataset_balanced.csv  <- Dataset tabular balanceado del nodo principal
+│           └── dataset_balanced.csv  <- Tabular balanced dataset from main node
 ├── backend/
-│   ├── README.md                   <- Documentacion del backend
-│   ├── mqtt_bridge.py              <- Puente Mosquitto -> Azure IoT Hub
-│   ├── requirements.txt            <- Dependencias del bridge (paho-mqtt, azure-iot-device)
-│   └── azure_functions/            <- Raiz del Function App
+│   ├── README.md                   <- Backend documentation
+│   ├── mqtt_bridge.py            <- Mosquitto -> Azure IoT Hub bridge
+│   ├── requirements.txt            <- Bridge dependencies (paho-mqtt, azure-iot-device)
+│   └── azure_functions/            <- Function App Root
 │       ├── host.json
-│       ├── local.settings.json     <- Variables locales (no commitear con valores reales)
-│       ├── requirements.txt        <- Dependencias para despliegue en Azure
+│       ├── local.settings.json     <- Local variables (do not commit with real values)
+│       ├── requirements.txt        <- Dependencies for Azure deployment
 │       ├── shared_code/
 │       │   ├── __init__.py
-│       │   └── alerts.py           <- Umbrales + Telegram Bot API
-│       ├── telemetry_processor/    <- Ingestión IoT Hub -> Cosmos DB
+│       │   └── alerts.py           <- Thresholds + Telegram Bot API
+│       ├── telemetry_processor/    <- IoT Hub ingestion -> Cosmos DB
 │       │   ├── __init__.py
 │       │   └── function.json
-│       ├── get_datos/              <- GET /api/datos
+│       ├── get_data/             <- GET /api/data
 │       │   ├── __init__.py
 │       │   └── function.json
-│       ├── descargar_csv/          <- GET /api/datos/csv
+│       ├── download_csv/          <- GET /api/data/csv
 │       │   ├── __init__.py
 │       │   └── function.json
-│       ├── control_actuador/       <- POST /api/actuador (ON/OFF/RESET)
+│       ├── actuator_control/       <- POST /api/actuator (ON/OFF/RESET)
 │       │   ├── __init__.py
 │       │   └── function.json
-│       └── ingestar_camara/        <- POST /api/camara (telemetria ESP32-CAM)
+│       └── ingest_camera/        <- POST /api/camera (ESP32-CAM telemetry)
 │           ├── __init__.py
 │           └── function.json
 ├── frontend/
-│   ├── README.md                   <- Documentacion del frontend
-│   ├── index.html                  <- Dashboard oscuro CNC PCB
-│   ├── app.js                      <- Logica de UI (polling, camara, actuador, CSV)
-│   └── style.css                   <- Tema oscuro
+│   ├── README.md                   <- Frontend documentation
+│   ├── index.html                <- Dark CNC PCB Dashboard
+│   ├── app.js                    <- UI logic (polling, camera, actuator, CSV)
+│   └── style.css                 <- Dark theme
 └── Deploy/
-    ├── deploy.sh                   <- Orquestador (flags: --no-infra, --no-front, etc.)
-    ├── _shared_env.sh              <- Helper de secretos y variables compartidas
-    ├── 01_infraestructura.sh       <- RG + IoT Hub + Cosmos DB Serverless + Storage Accounts
-    ├── 02_backend.sh               <- Function App + App Settings + publicacion
-    ├── 03_frontend_hosting.sh      <- Static Website + inyeccion de variables + CORS
-    ├── 04_cleanup.sh               <- Eliminacion del entorno (confirmacion interactiva)
-    ├── README.MD                   <- Guia de despliegue desde Azure Cloud Shell
-    └── infra_outputs.env.template  <- Plantilla de variables (copiar a infra_outputs.env)
+    ├── deploy.sh                   <- Orchestrator (flags: --no-infra, --no-front, etc.)
+    ├── _shared_env.sh              <- Secrets and shared variables helper
+    ├── 01_infrastructure.sh        <- RG + IoT Hub + Cosmos DB Serverless + Storage Accounts
+    ├── 02_backend.sh               <- Function App + App Settings + publishing
+    ├── 03_frontend_hosting.sh      <- Static Website + variable injection + CORS
+    ├── 04_cleanup.sh               <- Environment removal (interactive confirmation)
+    ├── README.MD                   <- Deployment guide from Azure Cloud Shell
+    └── infra_outputs.env.template  <- Variables template (copy to infra_outputs.env)
+
 ```
 
 ---
 
-## 4. Contrato JSON de telemetria
+## 4. Telemetry JSON Contract
 
-### Nodo principal (cnc_fresadora_01)
+### Main node (cnc_fresadora_01)
 
-Payload publicado por el nodo principal via MQTTS al topic `devices/cnc_fresadora_01/messages/events/`:
+Payload published by the main node via MQTTS to the topic `devices/cnc_fresadora_01/messages/events/`:
 
 ```json
 {
@@ -154,11 +156,12 @@ Payload publicado por el nodo principal via MQTTS al topic `devices/cnc_fresador
     "visual_anomaly_score": null
   }
 }
+
 ```
 
-### Nodo ESP32-CAM (cnc_camera_01)
+### ESP32-CAM node (cnc_camera_01)
 
-Payload publicado por el nodo de camara via MQTTS al topic `devices/cnc_camera_01/messages/events/`:
+Payload published by the camera node via MQTTS to the topic `devices/cnc_camera_01/messages/events/`:
 
 ```json
 {
@@ -177,26 +180,28 @@ Payload publicado por el nodo de camara via MQTTS al topic `devices/cnc_camera_0
     }
   }
 }
+
 ```
 
-#### Clases de clasificacion PCB
+#### PCB Classification Classes
 
-| Clase | Descripcion |
-|---|---|
-| `PCB_Mixta` | PCB con componentes through-hole y SMD coexistiendo |
-| `PCB_SMD`   | PCB con componentes de montaje superficial unicamente |
-| `PCB_TH`    | PCB con componentes through-hole / insercion unicamente |
-| `Sin_PCB`   | Bancada vacia, sin placa visible |
+| Class | Description |
+| --- | --- |
+| `PCB_Mixta` | PCB with both through-hole and SMD components |
+| `PCB_SMD` | PCB with surface mount components only |
+| `PCB_TH` | PCB with through-hole / insertion components only |
+| `Sin_PCB` | Empty bed, no visible board |
 
-#### Logica de publicacion controlada (firmware)
+#### Controlled publishing logic (firmware)
 
-El firmware `cnc_camera_node.ino` publica unicamente cuando:
-1. Han transcurrido **>= 10 segundos** desde la ultima publicacion, **o**
-2. La clase predicha **cambio** respecto a la ultima inferencia publicada.
+The `cnc_camera_node.ino` firmware publishes only when:
 
-Esto evita saturar el IoT Hub con lecturas redundantes y respeta la cuota del tier gratuito.
+1. **>= 10 seconds** have passed since the last publication, **or**
+2. The predicted class **changed** compared to the last published inference.
 
-#### Flujo de inferencia MQTT
+This avoids saturating the IoT Hub with redundant readings and respects the free tier quota.
+
+#### MQTT inference flow
 
 ```mermaid
 sequenceDiagram
@@ -208,36 +213,38 @@ sequenceDiagram
 
     CAM->>EI: capture frame (96x96 RGB565)
     EI-->>CAM: InferenceResult {pcb_class, confidence, probs}
-    CAM->>CAM: shouldPublish? (timeout >=10s o clase cambio)
+    CAM->>CAM: shouldPublish? (timeout >=10s or class change)
     CAM->>HUB: MQTTS publish devices/cnc_camera_01/messages/events/
     HUB->>FN: EventHub trigger (payload JSON)
-    FN->>FN: detecta campo "camera" -> _build_camera_document()
+    FN->>FN: detects "camera" field -> _build_camera_document()
     FN->>DB: upsert_item (device_type: camera)
+
 ```
 
 ---
 
-## 4b. Flujo de captura del dataset
+## 4b. Dataset capture flow
 
 ```mermaid
 flowchart LR
-    A([Operador]) -->|uv run capture.py\n--host IP --class CLASE| B[capture.py]
-    B -->|GET /capture| C[ESP32-CAM\nfirmware capture_express]
+    A([Operator]) -->|uv run capture.py\n--host IP --class CLASS| B[capture.py]
+    B -->|GET /capture| C[ESP32-CAM\ncapture_express firmware]
     C -->|JPEG 800x600| B
-    B -->|OpenCV cv2.imshow| D[Ventana de preview\norientacion, foco, luz]
-    D -->|ENTER / s| E{Usuario confirma?}
-    E -->|Si| F[Rafaga de capturas\nN imagenes con delay]
-    E -->|No / ESC| G([Cancelado])
-    F -->|valida Content-Type\ny tamano minimo| H[(dataset/CLASE/\nCLASE_timestamp_NNNN.jpg)]
-    H -->|subir a Edge Impulse| I[Entrenamiento del modelo]
-    I -->|exportar libreria Arduino| J[CNC_PCB_Classifier_inferencing.h]
+    B -->|OpenCV cv2.imshow| D[Preview window\norientation, focus, light]
+    D -->|ENTER / s| E{User confirms?}
+    E -->|Yes| F[Burst of captures\nN images with delay]
+    E -->|No / ESC| G([Cancelled])
+    F -->|validates Content-Type\nand minimum size| H[(dataset/CLASS/\nCLASS_timestamp_NNNN.jpg)]
+    H -->|upload to Edge Impulse| I[Model Training]
+    I -->|export Arduino library| J[CNC_PCB_Classifier_inferencing.h]
+
 ```
 
 ---
 
-## 5. Documento almacenado en Cosmos DB
+## 5. Document stored in Cosmos DB
 
-### Nodo principal
+### Main node
 
 ```json
 {
@@ -260,9 +267,10 @@ flowchart LR
   },
   "raw_payload": { "...": "..." }
 }
+
 ```
 
-### Nodo ESP32-CAM
+### ESP32-CAM node
 
 ```json
 {
@@ -283,206 +291,225 @@ flowchart LR
     }
   }
 }
+
 ```
 
-Ambos documentos coexisten en el mismo contenedor `Telemetry`, diferenciados por `device_id` (partition key).
+Both documents coexist in the same `Telemetry` container, differentiated by `device_id` (partition key).
 
 ---
 
 ## 6. Azure Functions — endpoints
 
-| Funcion | Trigger | Ruta | Auth |
-|---|---|---|---|
+| Function | Trigger | Route | Auth |
+| --- | --- | --- | --- |
 | `telemetry_processor` | EventHub (IoT Hub) | — | — |
-| `get_datos` | HTTP GET | `/api/datos` | function |
-| `descargar_csv` | HTTP GET | `/api/datos/csv` | function |
-| `control_actuador` | HTTP POST | `/api/actuador` | function |
-| `ingestar_camara` | HTTP POST | `/api/camara` | function |
+| `get_data` | HTTP GET | `/api/data` | function |
+| `download_csv` | HTTP GET | `/api/data/csv` | function |
+| `actuator_control` | HTTP POST | `/api/actuator` | function |
+| `ingest_camera` | HTTP POST | `/api/camera` | function |
 
-### `get_datos` — parametros opcionales
-| Parametro | Tipo | Default | Descripcion |
-|---|---|---|---|
-| `limit` | int | 100 | Maximo 500 registros |
-| `device_id` | string | todos | Filtrar por dispositivo |
+### `get_data` — optional parameters
 
-### `descargar_csv` — parametros opcionales
-| Parametro | Tipo | Descripcion |
-|---|---|---|
-| `device_id` | string | Filtrar por dispositivo |
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | int | 100 | Maximum 500 records |
+| `device_id` | string | all | Filter by device |
 
-### `control_actuador` — body JSON
+### `download_csv` — optional parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `device_id` | string | Filter by device |
+
+### `actuator_control` — JSON body
+
 ```json
-{ "comando": "ON" }
+{ "command": "ON" }
+
 ```
-Comandos validos: `ON`, `OFF`, `RESET`.
-El `device_id` se fuerza desde `IOT_DEVICE_ID` (variable de entorno), ignorando lo que envie el cliente.
+
+Valid commands: `ON`, `OFF`, `RESET`.
+The `device_id` is forced from `IOT_DEVICE_ID` (environment variable), ignoring what the client sends.
 
 ---
 
-## 7. Variables de entorno requeridas
+## 7. Required environment variables
 
-Todas las variables se configuran como App Settings en Azure (nunca hardcodeadas).
-Para desarrollo local, completar `backend/azure_functions/local.settings.json`.
+All variables are configured as App Settings in Azure (never hardcoded).
+For local development, complete `backend/azure_functions/local.settings.json`.
 
-| Variable | Descripcion |
-|---|---|
-| `AzureWebJobsStorage` | Cadena de conexion del Storage Account de Functions |
+| Variable | Description |
+| --- | --- |
+| `AzureWebJobsStorage` | Connection string of the Functions Storage Account |
 | `FUNCTIONS_WORKER_RUNTIME` | `python` |
-| `IOTHUB_EVENTS_CONNECTION_STRING` | **Endpoint Event Hub-compatible** del IoT Hub — formato `Endpoint=sb://...` (para el trigger de `telemetry_processor`) |
-| `IOT_HUB_EVENTHUB_NAME` | Nombre interno del Event Hub del IoT Hub |
-| `IOTHUB_SERVICE_CONNECTION_STRING` | Cadena de conexion del servicio IoT Hub — formato `HostName=...` (para Direct Methods y C2D) |
-| `IOT_DEVICE_ID` | ID del dispositivo ESP32 registrado en IoT Hub |
-| `COSMOSDB_CONNECTION` | Cadena de conexion primaria de Cosmos DB |
-| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (de @BotFather) — opcional |
-| `TELEGRAM_CHAT_ID` | ID del chat o grupo de Telegram para alertas — opcional |
-| `ALERT_COOLDOWN_SECONDS` | Segundos entre recordatorios de fallo activo (default: `300`) |
-| `TEMP_MIN` | Temperatura minima normal (default: `15.0` grados C) |
-| `TEMP_MAX` | Temperatura maxima normal (default: `45.0` grados C) |
-| `HUM_MIN` | Humedad minima normal (default: `20.0` %) |
-| `HUM_MAX` | Humedad maxima normal (default: `80.0` %) |
-| `VIBRATION_ANOMALY_THRESHOLD` | Score minimo para disparar alerta (default: `0.80`) |
+| `IOTHUB_EVENTS_CONNECTION_STRING` | **Event Hub-compatible endpoint** of the IoT Hub — format `Endpoint=sb://...` (for `telemetry_processor` trigger) |
+| `IOT_HUB_EVENTHUB_NAME` | Internal name of the IoT Hub Event Hub |
+| `IOTHUB_SERVICE_CONNECTION_STRING` | Connection string of the IoT Hub service — format `HostName=...` (for Direct Methods and C2D) |
+| `IOT_DEVICE_ID` | ESP32 device ID registered in IoT Hub |
+| `COSMOSDB_CONNECTION` | Primary connection string of Cosmos DB |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token (from @BotFather) — optional |
+| `TELEGRAM_CHAT_ID` | Telegram chat or group ID for alerts — optional |
+| `ALERT_COOLDOWN_SECONDS` | Seconds between reminders of an active fault (default: `300`) |
+| `TEMP_MIN` | Minimum normal temperature (default: `15.0` C) |
+| `TEMP_MAX` | Maximum normal temperature (default: `45.0` C) |
+| `HUM_MIN` | Minimum normal humidity (default: `20.0` %) |
+| `HUM_MAX` | Maximum normal humidity (default: `80.0` %) |
+| `VIBRATION_ANOMALY_THRESHOLD` | Minimum score to trigger alert (default: `0.80`) |
 
-> **Importante:** `IOTHUB_EVENTS_CONNECTION_STRING` e `IOTHUB_SERVICE_CONNECTION_STRING` son cadenas con **formatos distintos**. El script `01_infraestructura.sh` las obtiene automaticamente con los comandos correctos del az CLI.
+> **Important:** `IOTHUB_EVENTS_CONNECTION_STRING` and `IOTHUB_SERVICE_CONNECTION_STRING` are strings with **different formats**. The `01_infrastructure.sh` script obtains them automatically with the correct az CLI commands.
 
 ---
 
-## 8. Flujo de despliegue
+## 8. Deployment flow
 
-### Pre-requisitos
+### Pre-requisites
 
 ```bash
-# Instalar az CLI y autenticarse
+# Install az CLI and authenticate
 az login
 
-# Instalar Azure Functions Core Tools
+# Install Azure Functions Core Tools
 npm install -g azure-functions-core-tools@4 --unsafe-perm true
+
 ```
 
-### Variables de Telegram (opcionales — antes de ejecutar)
+### Telegram variables (optional — before executing)
 
 ```bash
 export TELEGRAM_BOT_TOKEN="<token>"
 export TELEGRAM_CHAT_ID="<chat_id>"
+
 ```
 
-### Despliegue completo
+### Full deployment
 
 ```bash
 cd Deploy/
 ./deploy.sh
+
 ```
 
-### Despliegues parciales
+### Partial deployments
 
 ```bash
-./deploy.sh --no-infra      # Solo backend + frontend (infra ya existe)
-./deploy.sh --no-front      # Solo infra + backend
-./deploy.sh --only-backend  # Solo republica las Functions
-./deploy.sh --only-front    # Solo actualiza el frontend
+./deploy.sh --no-infra      # Backend + frontend only (infra already exists)
+./deploy.sh --no-front      # Infra + backend only
+./deploy.sh --only-backend  # Republishes Functions only
+./deploy.sh --only-front    # Updates frontend only
+
 ```
 
-### Eliminar el entorno (ahorro de costos)
+### Remove the environment (cost saving)
 
 ```bash
 ./04_cleanup.sh
-# Pide confirmacion interactiva antes de borrar.
-# Usar FORCE_CLEANUP=true ./04_cleanup.sh en pipelines CI/CD.
+# Asks for interactive confirmation before deleting.
+# Use FORCE_CLEANUP=true ./04_cleanup.sh in CI/CD pipelines.
+
 ```
 
 ---
 
-## 9. Seguridad
+## 9. Security
 
-- Ninguna credencial real se incluye en el repositorio. `local.settings.json` contiene unicamente placeholders.
-- `Deploy/infra_outputs.env` esta en `.gitignore`. Nunca commitear este archivo.
-- Los endpoints HTTP usan `authLevel: "function"` para requerir una clave de acceso.
-- El `device_id` del actuador se fuerza desde la variable de entorno `IOT_DEVICE_ID`.
-- El script `01_infraestructura.sh` establece `chmod 600` en `infra_outputs.env`.
-- Las cadenas de conexion nunca se imprimen en la salida estandar de los scripts.
+* No real credentials are included in the repository. `local.settings.json` contains placeholders only.
+* `Deploy/infra_outputs.env` is in `.gitignore`. Never commit this file.
+* HTTP endpoints use `authLevel: "function"` to require an access key.
+* The actuator `device_id` is forced from the `IOT_DEVICE_ID` environment variable.
+* The `01_infrastructure.sh` script sets `chmod 600` on `infra_outputs.env`.
+* Connection strings are never printed to the scripts' standard output.
 
 ---
 
-## 10. Justificacion del stack tecnologico
+## 10. Justification of the technological stack
 
-Esta seccion fundamenta las decisiones de arquitectura tomadas en el proyecto, considerando las restricciones de presupuesto reducido, seguridad de datos, velocidad de desarrollo y el contexto academico-tecnico.
+This section substantiates the architectural decisions made in the project, considering constraints of reduced budget, data security, development speed, and the academic-technical context.
 
-### Contexto y restricciones
+### Context and constraints
 
-El proceso de manufactura de PCBs mediante fresado CNC es de alta precision. Desviaciones termicas o vibraciones anomalas pueden arruinar placas de cobre costosas y danar herramientas. El proyecto opera bajo:
+The PCB manufacturing process via CNC milling is high-precision. Thermal deviations or anomalous vibrations can ruin expensive copper boards and damage tools. The project operates under:
 
-- **Presupuesto extremadamente limitado** (suscripcion de estudiante de Azure)
-- **Bajo costo operativo** como requisito no negociable
-- **Seguridad de datos** mediante manejo correcto de credenciales
-- **Velocidad de desarrollo** adecuada para prototipo academico-tecnico
-- **Arquitectura modular** preparada para incorporar la capa de vision artificial sin romper el diseno actual
+* **Extremely limited budget** (Azure student subscription)
+* **Low operating cost** as a non-negotiable requirement
+* **Data security** through correct credential handling
+* **Development speed** suitable for an academic-technical prototype
+* **Modular architecture** ready to incorporate the artificial vision layer without breaking the current design
 
-### Matriz de decisiones arquitectonicas
+### Architectural decision matrix
 
-| Componente | Tecnologia elegida | Alternativas descartadas | Justificacion |
-|---|---|---|---|
-| Firmware | C++ / Arduino IDE | MicroPython, Zephyr | Acceso directo al hardware, ecosistema de librerias listo para sensores, integracion con Edge Impulse SDK, velocidad de prototipado |
-| Comunicacion | MQTT (MQTTS 8883) | HTTP REST | Menor overhead para microcontroladores, patron pub/sub desacopla firmware de consumidores, menor costo computacional en ESP32 |
-| Computo cloud | Azure Functions (Consumption Plan) | VM, Docker/ACI 24/7 | Pago por uso real — una VM activa consume presupuesto aunque la maquina este apagada; serverless reduce costo en entorno academico; evita administracion de infraestructura persistente |
-| Persistencia | Cosmos DB Serverless | InfluxDB, PostgreSQL | Pago por uso, integracion directa con Azure Functions, esquema JSON flexible para coexistencia de payloads distintos (nodo principal + nodo camara), sin administracion de BD dedicada |
-| Alertas | Telegram Bot API | Correo SMTP, SMS | Gratuito, integracion simple via HTTP, sin dependencias de pasarelas pagas, util para alertas inmediatas en prototipo |
+| Component | Chosen Technology | Discarded Alternatives | Justification |
+| --- | --- | --- | --- |
+| Firmware | C++ / Arduino IDE | MicroPython, Zephyr | Direct hardware access, library ecosystem ready for sensors, integration with Edge Impulse SDK, prototyping speed |
+| Communication | MQTT (MQTTS 8883) | HTTP REST | Lower overhead for microcontrollers, pub/sub pattern decouples firmware from consumers, lower computational cost on ESP32 |
+| Cloud compute | Azure Functions (Consumption Plan) | VM, Docker/ACI 24/7 | Pay for actual usage — an active VM consumes budget even when the machine is off; serverless reduces cost in academic environment; avoids persistent infrastructure management |
+| Persistence | Cosmos DB Serverless | InfluxDB, PostgreSQL | Pay for usage, direct integration with Azure Functions, flexible JSON schema for coexistence of different payloads (main node + camera node), no dedicated DB management |
+| Alerts | Telegram Bot API | Email SMTP, SMS | Free, simple integration via HTTP, no paid gateway dependencies, useful for immediate alerts in prototype |
 
-### Detalle por decision
+### Detail by decision
 
 #### Firmware: C++ / Arduino IDE
 
-El SDK de Edge Impulse para inferencia embebida exporta librerias en formato Arduino. Usar C++ sobre Arduino IDE garantiza compatibilidad directa con el SDK exportado, acceso eficiente a los perifericos (I2C para MPU-6050, GPIO para DHT22, UART para depuracion), y una curva de aprendizaje reducida para modificar el proyecto.
+The Edge Impulse SDK for embedded inference exports libraries in Arduino format. Using C++ on Arduino IDE ensures direct compatibility with the exported SDK, efficient access to peripherals (I2C for MPU-6050, GPIO for DHT22, UART for debugging), and a reduced learning curve to modify the project.
 
-#### Comunicacion: MQTT frente a HTTP
+#### Communication: MQTT vs. HTTP
 
-HTTP implica una conexion TCP nueva por cada envio de telemetria, con headers de mayor tamano y mayor latencia. MQTT mantiene una conexion persistente, consume menos memoria RAM en el microcontrolador y permite que multiples consumidores reciban el mismo mensaje sin modificar el firmware (patron publish/subscribe). Azure IoT Hub soporta MQTT nativamente, lo que elimina infraestructura adicional de broker.
+HTTP implies a new TCP connection for each telemetry transmission, with larger headers and higher latency. MQTT maintains a persistent connection, consumes less RAM in the microcontroller, and allows multiple consumers to receive the same message without modifying the firmware (publish/subscribe pattern). Azure IoT Hub supports MQTT natively, which eliminates additional broker infrastructure.
 
-#### Computo cloud: Azure Functions (Serverless)
+#### Cloud compute: Azure Functions (Serverless)
 
-Una maquina virtual o contenedor activo 24/7 genera costo incluso cuando la fresadora esta apagada. En el Consumption Plan de Azure Functions, el costo es proporcional al numero de invocaciones y al tiempo de ejecucion. Para un sistema de monitoreo industrial ligero con intervalos de muestreo de 5 segundos, el consumo mensual cae dentro del tier gratuito o cerca de cero costo. Adicionalmente, Azure Functions se autentica mediante App Settings para credenciales, evitando hardcodeo.
+A virtual machine or container active 24/7 generates cost even when the milling machine is off. In the Azure Functions Consumption Plan, the cost is proportional to the number of invocations and execution time. For a light industrial monitoring system with sampling intervals of 5 seconds, the monthly consumption falls within the free tier or near zero cost. Additionally, Azure Functions authenticates using App Settings for credentials, avoiding hardcoding.
 
-#### Persistencia: Cosmos DB Serverless
+#### Persistence: Cosmos DB Serverless
 
-InfluxDB y PostgreSQL ofrecen funcionalidades especializadas en series temporales, pero requieren instancias dedicadas (costo fijo). Cosmos DB en modo Serverless cobra por RUs consumidas, con un tier gratuito de 1000 RUs/s. Su modelo de datos documental (JSON) encaja directamente con los payloads del sistema, sin necesidad de transformacion de esquema. La integracion con Azure Functions via cadena de conexion es nativa, reduciendo codigo de integracion.
+InfluxDB and PostgreSQL offer specialized functionality for time series but require dedicated instances (fixed cost). Cosmos DB in Serverless mode charges per RUs consumed, with a free tier of 1000 RUs/s. Its document data model (JSON) fits directly with the system's payloads, without the need for schema transformation. Integration with Azure Functions via connection string is native, reducing integration code.
 
-#### Alertas: Telegram Bot API
+#### Alerts: Telegram Bot API
 
-Las soluciones de correo (SendGrid, SMTP) y SMS (Twilio) tienen costos variables por mensaje o requieren configuracion de dominios verificados. La API de Telegram es gratuita, no requiere infraestructura adicional, y la integracion se reduce a un POST HTTP con el token del bot, lo que acelera la validacion del prototipo.
+Email (SendGrid, SMTP) and SMS (Twilio) solutions have variable costs per message or require verification of domains. The Telegram API is free, requires no additional infrastructure, and integration is reduced to an HTTP POST with the bot token, which accelerates prototype validation.
 
 ---
 
-## 11. Estado del proyecto y extensibilidad
+## 11. Project status and extensibility
 
-### Listo para produccion
-- Pipeline completo: ESP32 -> MQTT -> IoT Hub -> Cosmos DB -> Dashboard
-- Nodo ESP32-CAM independiente: MQTTS -> IoT Hub -> `telemetry_processor` -> Cosmos DB (ruta principal) o HTTP POST -> `ingestar_camara` -> Cosmos DB (ruta de depuracion)
-- Clasificacion PCB en tiempo real: `PCB_Mixta`, `PCB_SMD`, `PCB_TH`, `Sin_PCB`
-- Publicacion controlada de camara: cada 10 s o ante cambio de clase
-- Control de actuador (3 metodos en cascada: Direct Method, C2D SDK, REST C2D)
-- Alertas de Telegram con politica anti-spam (cooldown configurable)
-- Scripts de despliegue repetibles con un solo comando
+### Ready for production
 
-### Flujo ESP32-CAM — primeros pasos
+* Complete pipeline: ESP32 -> MQTT -> IoT Hub -> Cosmos DB -> Dashboard
+* Independent ESP32-CAM node: MQTTS -> IoT Hub -> `telemetry_processor` -> Cosmos DB (main route) or HTTP POST -> `ingest_camera` -> Cosmos DB (debug route)
+* Real-time PCB classification: `PCB_Mixta`, `PCB_SMD`, `PCB_TH`, `Sin_PCB`
+* Controlled camera publishing: every 10 s or upon class change
+* Actuator control (3 cascading methods: Direct Method, C2D SDK, REST C2D)
+* Telegram alerts with anti-spam policy (configurable cooldown)
+* Repeatable deployment scripts with a single command
 
-1. **Registrar el dispositivo cnc_camera_01 en IoT Hub:**
-   ```bash
-   az iot hub device-identity create \
-     --hub-name <hub-name> --device-id cnc_camera_01
-   # Obtener la clave primaria para camera_secrets.h:
-   az iot hub device-identity show \
-     --hub-name <hub-name> --device-id cnc_camera_01 \
-     --query "authentication.symmetricKey.primaryKey" --output tsv
-   ```
-2. **Captura del dataset**: cargar `firmware/cnc_camera_node/capture_express/capture_express.ino`, luego ejecutar:
-   ```bash
-   cd firmware/cnc_camera_node/dataset_capture
-   uv run capture.py --host 192.168.1.100 --class PCB_SMD --count 50
-   # Para entornos sin pantalla: anadir --no-preview
-   ```
-3. **Entrenar modelo**: subir imagenes a Edge Impulse Studio y exportar la libreria Arduino.
-4. **Compilar firmware de inferencia MQTT**: copiar `camera_secrets.h.template` -> `camera_secrets.h`, rellenar `WIFI_SSID`, `WIFI_PASS`, `IOT_HUB_HOST` y `DEVICE_PRIMARY_KEY`. Instalar `PubSubClient` via Library Manager. Compilar y cargar `cnc_camera_node.ino`.
+### ESP32-CAM flow — first steps
 
-### Futuras extensiones
-- **Nuevas alertas**: agregar condiciones en `shared_code/alerts.py` sin tocar las demas funciones.
-- **Indices Cosmos DB**: para acelerar las consultas ordenadas por `timestamp`, agregar una politica de indice compuesto `["/device_id ASC", "/timestamp DESC"]` en el contenedor `Telemetry`.
-- **Frontend en Vercel**: ver `frontend/README.md` para instrucciones de despliegue en Vercel y GitHub Pages.
-- **Dataset tabular**: `firmware/model/dataset/dataset_balanced.csv` contiene el dataset balanceado del nodo principal para entrenamiento o evaluacion fuera de Edge Impulse.
+1. **Register the cnc_camera_01 device in IoT Hub:**
+```bash
+az iot hub device-identity create \
+  --hub-name <hub-name> --device-id cnc_camera_01
+# Get the primary key for camera_secrets.h:
+az iot hub device-identity show \
+  --hub-name <hub-name> --device-id cnc_camera_01 \
+  --query "authentication.symmetricKey.primaryKey" --output tsv
+
+```
+
+
+2. **Dataset capture**: load `firmware/cnc_camera_node/capture_express/capture_express.ino`, then execute:
+```bash
+cd firmware/cnc_camera_node/dataset_capture
+uv run capture.py --host 192.168.1.100 --class PCB_SMD --count 50
+# For environments without a screen: add --no-preview
+
+```
+
+
+3. **Train model**: upload images to Edge Impulse Studio and export the Arduino library.
+4. **Compile MQTT inference firmware**: copy `camera_secrets.h.template` -> `camera_secrets.h`, fill in `WIFI_SSID`, `WIFI_PASS`, `IOT_HUB_HOST` and `DEVICE_PRIMARY_KEY`. Install `PubSubClient` via Library Manager. Compile and load `cnc_camera_node.ino`.
+
+### Future extensions
+
+* **New alerts**: add conditions in `shared_code/alerts.py` without touching other functions.
+* **Cosmos DB indexes**: to accelerate queries ordered by `timestamp`, add a composite index policy `["/device_id ASC", "/timestamp DESC"]` in the `Telemetry` container.
+* **Frontend on Vercel**: see `frontend/README.md` for Vercel and GitHub Pages deployment instructions.
+* **Tabular dataset**: `firmware/model/dataset/dataset_balanced.csv` contains the balanced dataset from the main node for training or evaluation outside Edge Impulse.
